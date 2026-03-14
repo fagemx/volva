@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(bun *)",
+      "Bash(npx *)",
+      "Bash(npm *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(rm *)",
+      "Bash(find *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(grep *)",
+      "Bash(curl *)",
+      "Bash(cd *)",
+      "Bash(echo *)",
+      "Bash(pwd)",
+      "Bash(netstat *)",
+      "Bash(taskkill *)",
+      "Bash(git add:*)"
+    ]
+  }
+}
