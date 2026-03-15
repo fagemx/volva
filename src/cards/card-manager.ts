@@ -1,6 +1,15 @@
 import type { Database } from 'bun:sqlite';
 import type { CardType, AnyCard, CardDiff, CardEnvelope } from '../schemas/card';
 
+export interface DiffEntry {
+  id: string;
+  cardId: string;
+  fromVersion: number;
+  toVersion: number;
+  diff: CardDiff;
+  createdAt: string;
+}
+
 // ─── Diff Logic ───
 
 function flattenObject(
@@ -134,6 +143,12 @@ export class CardManager {
       [newId, conversationId, type, newVersion, JSON.stringify(mergedContent), originalCreatedAt, now],
     );
 
+    const diffId = crypto.randomUUID();
+    this.db.run(
+      'INSERT INTO card_diffs (id, card_id, from_version, to_version, diff, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [diffId, newId, oldVersion, newVersion, JSON.stringify(diff), now],
+    );
+
     const updatedCard: CardEnvelope = {
       id: newId,
       conversationId,
@@ -170,5 +185,26 @@ export class CardManager {
       oldContent as unknown as Record<string, unknown>,
       newContent as unknown as Record<string, unknown>,
     );
+  }
+
+  getDiffHistory(conversationId: string): DiffEntry[] {
+    const rows = this.db
+      .query(
+        `SELECT cd.id, cd.card_id, cd.from_version, cd.to_version, cd.diff, cd.created_at
+         FROM card_diffs cd
+         JOIN cards c ON cd.card_id = c.id
+         WHERE c.conversation_id = ?
+         ORDER BY cd.from_version ASC`,
+      )
+      .all(conversationId) as Record<string, unknown>[];
+
+    return rows.map((row) => ({
+      id: row.id as string,
+      cardId: row.card_id as string,
+      fromVersion: row.from_version as number,
+      toVersion: row.to_version as number,
+      diff: JSON.parse(row.diff as string) as CardDiff,
+      createdAt: row.created_at as string,
+    }));
   }
 }

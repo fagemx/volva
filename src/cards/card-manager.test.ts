@@ -172,6 +172,59 @@ describe('computeDiff', () => {
   });
 });
 
+// ─── Diff History Tests ───
+
+describe('CardManager.getDiffHistory', () => {
+  it('returns empty array for new card', () => {
+    mgr.create('conv1', 'world', minimalWorldCard);
+    const history = mgr.getDiffHistory('conv1');
+    expect(history).toHaveLength(0);
+  });
+
+  it('returns one entry after first update', () => {
+    const card = mgr.create('conv1', 'world', minimalWorldCard);
+    mgr.update(card.id, { ...minimalWorldCard, goal: 'Updated goal' });
+    const history = mgr.getDiffHistory('conv1');
+    expect(history).toHaveLength(1);
+  });
+
+  it('returns entries in version order after multiple updates', () => {
+    const card = mgr.create('conv1', 'world', minimalWorldCard);
+    const { card: v2 } = mgr.update(card.id, { ...minimalWorldCard, goal: 'v2' });
+    mgr.update(v2.id, { ...minimalWorldCard, goal: 'v3' });
+    const history = mgr.getDiffHistory('conv1');
+    expect(history).toHaveLength(2);
+    expect(history[0].fromVersion).toBe(1);
+    expect(history[0].toVersion).toBe(2);
+    expect(history[1].fromVersion).toBe(2);
+    expect(history[1].toVersion).toBe(3);
+  });
+
+  it('diff entries have correct fromVersion/toVersion', () => {
+    const card = mgr.create('conv1', 'world', minimalWorldCard);
+    mgr.update(card.id, { ...minimalWorldCard, goal: 'New goal' });
+    const history = mgr.getDiffHistory('conv1');
+    expect(history[0].fromVersion).toBe(1);
+    expect(history[0].toVersion).toBe(2);
+  });
+
+  it('diff entries contain correct added/removed/changed paths', () => {
+    const card = mgr.create('conv1', 'world', minimalWorldCard);
+    mgr.update(card.id, { ...minimalWorldCard, goal: 'New goal' });
+    const history = mgr.getDiffHistory('conv1');
+    expect(history[0].diff.changed).toContain('goal');
+  });
+
+  it('does not return diffs from other conversations', () => {
+    const card1 = mgr.create('conv1', 'world', minimalWorldCard);
+    const card2 = mgr.create('conv2', 'world', minimalWorldCard);
+    mgr.update(card1.id, { ...minimalWorldCard, goal: 'conv1 goal' });
+    mgr.update(card2.id, { ...minimalWorldCard, goal: 'conv2 goal' });
+    const history = mgr.getDiffHistory('conv1');
+    expect(history).toHaveLength(1);
+  });
+});
+
 // ─── Edge Cases ───
 
 describe('CardManager edge cases', () => {

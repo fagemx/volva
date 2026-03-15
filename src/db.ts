@@ -35,6 +35,15 @@ export function initSchema(db: Database): void {
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
 
+  db.run(`CREATE TABLE IF NOT EXISTS card_diffs (
+    id TEXT PRIMARY KEY,
+    card_id TEXT NOT NULL REFERENCES cards(id),
+    from_version INTEGER NOT NULL,
+    to_version INTEGER NOT NULL,
+    diff TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
   db.run(`CREATE TABLE IF NOT EXISTS settlements (
     id TEXT PRIMARY KEY,
     conversation_id TEXT NOT NULL REFERENCES conversations(id),
