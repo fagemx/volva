@@ -5,9 +5,10 @@ import type { WorldCard } from '../schemas/card';
 
 const baseCard: WorldCard = {
   goal: 'My Village',
+  target_repo: 'github.com/test/repo',
   confirmed: {
-    hard_rules: ['No refunds'],
-    soft_rules: ['Be polite'],
+    hard_rules: [{ description: 'No refunds', scope: ['billing'] }],
+    soft_rules: [{ description: 'Be polite', scope: ['*'] }],
     must_have: ['Product FAQ', 'Inventory Check'],
     success_criteria: [],
   },
@@ -36,13 +37,34 @@ describe('buildVillagePack', () => {
     expect((result.village as Record<string, unknown>).name).toBe('Untitled Village');
   });
 
+  it('maps target_repo to village.target_repo', () => {
+    const result = yaml.load(buildVillagePack(baseCard)) as Record<string, unknown>;
+    expect((result.village as Record<string, unknown>).target_repo).toBe('github.com/test/repo');
+  });
+
+  it('uses fallback target_repo when null', () => {
+    const card: WorldCard = { ...baseCard, target_repo: null };
+    const result = yaml.load(buildVillagePack(card)) as Record<string, unknown>;
+    expect((result.village as Record<string, unknown>).target_repo).toBe('default');
+  });
+
   it('includes constitution rules from card', () => {
     const result = yaml.load(buildVillagePack(baseCard)) as Record<string, unknown>;
     const constitution = result.constitution as Record<string, unknown>;
-    const rules = constitution.rules as Array<Record<string, string>>;
+    const rules = constitution.rules as Array<Record<string, unknown>>;
     expect(rules).toHaveLength(2);
     expect(rules[0].enforcement).toBe('hard');
+    expect(rules[0].description).toBe('No refunds');
     expect(rules[1].enforcement).toBe('soft');
+    expect(rules[1].description).toBe('Be polite');
+  });
+
+  it('includes scope arrays in rules', () => {
+    const result = yaml.load(buildVillagePack(baseCard)) as Record<string, unknown>;
+    const constitution = result.constitution as Record<string, unknown>;
+    const rules = constitution.rules as Array<Record<string, unknown>>;
+    expect(rules[0].scope).toEqual(['billing']);
+    expect(rules[1].scope).toEqual(['*']);
   });
 
   it('includes chief section when chief_draft is present', () => {
@@ -50,6 +72,12 @@ describe('buildVillagePack', () => {
     const chief = result.chief as Record<string, unknown>;
     expect(chief.name).toBe('Bot');
     expect(chief.personality).toBe('warm');
+  });
+
+  it('chief permissions are dispatch_task and propose_law', () => {
+    const result = yaml.load(buildVillagePack(baseCard)) as Record<string, unknown>;
+    const chief = result.chief as Record<string, unknown>;
+    expect(chief.permissions).toEqual(['dispatch_task', 'propose_law']);
   });
 
   it('omits chief section when chief_draft is null', () => {

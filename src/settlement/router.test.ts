@@ -4,6 +4,7 @@ import type { WorldCard, WorkflowCard, TaskCard } from '../schemas/card';
 
 const emptyWorldCard: WorldCard = {
   goal: null,
+  target_repo: null,
   confirmed: { hard_rules: [], soft_rules: [], must_have: [], success_criteria: [] },
   pending: [],
   chief_draft: null,
@@ -16,7 +17,7 @@ describe('classifySettlement', () => {
   it('WorldCard with hard_rules → village_pack', () => {
     const card: WorldCard = {
       ...emptyWorldCard,
-      confirmed: { ...emptyWorldCard.confirmed, hard_rules: ['rule1'] },
+      confirmed: { ...emptyWorldCard.confirmed, hard_rules: [{ description: 'rule1', scope: ['*'] }] },
     };
     expect(classifySettlement('world', card)).toBe('village_pack');
   });

@@ -20,6 +20,7 @@ export interface TurnResult {
 export function createEmptyWorldCard(): WorldCard {
   return {
     goal: null,
+    target_repo: null,
     confirmed: { hard_rules: [], soft_rules: [], must_have: [], success_criteria: [] },
     pending: [],
     chief_draft: null,
@@ -47,13 +48,13 @@ export function applyIntentToCard(card: WorldCard, intent: Intent): WorldCard {
       break;
     case 'set_boundary':
       if (intent.enforcement === 'hard') {
-        updated.confirmed.hard_rules.push(intent.summary);
+        updated.confirmed.hard_rules.push({ description: intent.summary, scope: ['*'] });
       } else {
-        updated.confirmed.soft_rules.push(intent.summary);
+        updated.confirmed.soft_rules.push({ description: intent.summary, scope: ['*'] });
       }
       break;
     case 'add_constraint':
-      updated.confirmed.soft_rules.push(intent.summary);
+      updated.confirmed.soft_rules.push({ description: intent.summary, scope: ['*'] });
       break;
     case 'style_preference':
       if (!updated.chief_draft) {
