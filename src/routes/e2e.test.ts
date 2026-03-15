@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { Hono } from 'hono';
 import { createDb, initSchema } from '../db';
 import { CardManager } from '../cards/card-manager';
@@ -297,5 +297,279 @@ describe('API-01: Response format', () => {
     const err = json.error as Record<string, unknown>;
     expect(err).toHaveProperty('code');
     expect(err).toHaveProperty('message');
+  });
+});
+
+// ─── GP-2: Full W1 Scenario ───
+
+describe('GP-2: Full W1 Scenario', () => {
+  let app: Hono;
+  let db: ReturnType<typeof createDb>;
+  let llm: ReturnType<typeof createMockLlm>;
+  let thyra: ReturnType<typeof createMockThyra>;
+  let conversationId: string;
+
+  beforeAll(async () => {
+    llm = createMockLlm();
+    thyra = createMockThyra();
+    ({ app, db } = createTestApp(llm, thyra));
+
+    const mockStructured = vi.fn();
+    const mockText = vi.fn();
+    (llm as unknown as Record<string, unknown>).generateStructured = mockStructured;
+    (llm as unknown as Record<string, unknown>).generateText = mockText;
+
+    // T1: new_intent (explore)
+    mockStructured.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: '自動化客服系統' },
+    });
+    mockText.mockResolvedValueOnce('你想做什麼樣的客服？');
+
+    // T2: add_info with 3 entities (explore)
+    mockStructured.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        type: 'add_info',
+        summary: '產品介紹、庫存查詢、退款',
+        entities: { cap1: '產品介紹', cap2: '庫存查詢', cap3: '退款處理' },
+      },
+    });
+    mockText.mockResolvedValueOnce('退款要全自動還是轉人工？');
+
+    // T3: set_boundary hard (explore -> focus)
+    mockStructured.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        type: 'set_boundary',
+        summary: '退款必須轉人工',
+        enforcement: 'hard',
+      },
+    });
+    mockText.mockResolvedValueOnce('收到，退款轉人工。');
+
+    // T4: add_info with 1 entity (focus)
+    mockStructured.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        type: 'add_info',
+        summary: '情緒偵測',
+        entities: { cap4: '情緒偵測' },
+      },
+    });
+    mockText.mockResolvedValueOnce('好，情緒激動也轉人工。');
+
+    // T5: add_constraint (focus)
+    mockStructured.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'add_constraint', summary: '庫存延遲不超過5分鐘' },
+    });
+    mockText.mockResolvedValueOnce('確認，庫存最多5分鐘。');
+
+    // T6: style_preference (focus)
+    mockStructured.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'style_preference', summary: '專業有溫度' },
+    });
+    mockText.mockResolvedValueOnce('要生成設定嗎？');
+
+    // T7: settle_signal (focus -> settle)
+    mockStructured.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'settle_signal', summary: '生成' },
+    });
+    mockText.mockResolvedValueOnce('已生成客服village設定。');
+
+    // Settlement: thyra mock
+    (thyra.applyVillagePack as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      villageId: 'v-123',
+    });
+
+    // Create conversation
+    const createRes = await jsonPost(app, '/api/conversations', {});
+    const createJson = (await createRes.json()) as Record<string, unknown>;
+    const convData = createJson.data as Record<string, unknown>;
+    conversationId = convData.id as string;
+  });
+
+  it('T1-T2: explore phase accumulates card', async () => {
+    // T1: new_intent
+    const t1Res = await jsonPost(
+      app,
+      `/api/conversations/${conversationId}/messages`,
+      { content: '我想做自動化客服系統' },
+    );
+    const t1Json = (await t1Res.json()) as Record<string, unknown>;
+    expect(t1Res.status).toBe(200);
+    const t1Data = t1Json.data as Record<string, unknown>;
+    expect(t1Data.phase).toBe('explore');
+
+    // T2: add_info with 3 entities
+    const t2Res = await jsonPost(
+      app,
+      `/api/conversations/${conversationId}/messages`,
+      { content: '需要產品介紹、庫存查詢、退款處理' },
+    );
+    const t2Json = (await t2Res.json()) as Record<string, unknown>;
+    expect(t2Res.status).toBe(200);
+    const t2Data = t2Json.data as Record<string, unknown>;
+    expect(t2Data.phase).toBe('explore');
+
+    // Card version should be 2 after T2 (create=v1, update=v2)
+    expect(t2Data.cardVersion).toBe(2);
+
+    // Verify card content via API
+    const cardRes = await app.request(
+      `/api/conversations/${conversationId}/card`,
+    );
+    const cardJson = (await cardRes.json()) as Record<string, unknown>;
+    const cardData = cardJson.data as Record<string, unknown>;
+    const content = cardData.content as Record<string, unknown>;
+    const confirmed = content.confirmed as Record<string, unknown>;
+    const mustHave = confirmed.must_have as string[];
+    expect(mustHave).toHaveLength(3);
+  });
+
+  it('T3: explore -> focus transition', async () => {
+    const res = await jsonPost(
+      app,
+      `/api/conversations/${conversationId}/messages`,
+      { content: '退款必須轉人工處理' },
+    );
+    const json = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    const data = json.data as Record<string, unknown>;
+    expect(data.phase).toBe('focus');
+
+    // Verify DB phase
+    const conv = db
+      .query('SELECT phase FROM conversations WHERE id = ?')
+      .get(conversationId) as Record<string, unknown>;
+    expect(conv.phase).toBe('focus');
+  });
+
+  it('T4-T6: focus phase refines card', async () => {
+    // T4: add_info
+    const t4Res = await jsonPost(
+      app,
+      `/api/conversations/${conversationId}/messages`,
+      { content: '需要情緒偵測功能' },
+    );
+    const t4Json = (await t4Res.json()) as Record<string, unknown>;
+    expect(t4Res.status).toBe(200);
+    const t4Data = t4Json.data as Record<string, unknown>;
+    expect(t4Data.phase).toBe('focus');
+
+    // T5: add_constraint
+    const t5Res = await jsonPost(
+      app,
+      `/api/conversations/${conversationId}/messages`,
+      { content: '庫存延遲不超過5分鐘' },
+    );
+    const t5Json = (await t5Res.json()) as Record<string, unknown>;
+    expect(t5Res.status).toBe(200);
+    const t5Data = t5Json.data as Record<string, unknown>;
+    expect(t5Data.phase).toBe('focus');
+
+    // T6: style_preference
+    const t6Res = await jsonPost(
+      app,
+      `/api/conversations/${conversationId}/messages`,
+      { content: '風格要專業有溫度' },
+    );
+    const t6Json = (await t6Res.json()) as Record<string, unknown>;
+    expect(t6Res.status).toBe(200);
+    const t6Data = t6Json.data as Record<string, unknown>;
+    expect(t6Data.phase).toBe('focus');
+
+    // Verify card accumulation
+    const cardRes = await app.request(
+      `/api/conversations/${conversationId}/card`,
+    );
+    const cardJson = (await cardRes.json()) as Record<string, unknown>;
+    const cardData = cardJson.data as Record<string, unknown>;
+    const content = cardData.content as Record<string, unknown>;
+    const confirmed = content.confirmed as Record<string, unknown>;
+
+    // must_have: 3 from T2 + 1 from T4 = 4
+    expect(confirmed.must_have as string[]).toHaveLength(4);
+    // hard_rules: 1 from T3
+    expect(confirmed.hard_rules as unknown[]).toHaveLength(1);
+    // soft_rules: 1 from T5 (add_constraint)
+    expect(confirmed.soft_rules as unknown[]).toHaveLength(1);
+    // chief_draft with style from T6
+    const chiefDraft = content.chief_draft as Record<string, unknown>;
+    expect(chiefDraft.style).toBe('專業有溫度');
+  });
+
+  it('T7: focus -> settle transition', async () => {
+    const res = await jsonPost(
+      app,
+      `/api/conversations/${conversationId}/messages`,
+      { content: '好，幫我生成設定' },
+    );
+    const json = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    const data = json.data as Record<string, unknown>;
+    expect(data.phase).toBe('settle');
+
+    // Verify DB phase
+    const conv = db
+      .query('SELECT phase FROM conversations WHERE id = ?')
+      .get(conversationId) as Record<string, unknown>;
+    expect(conv.phase).toBe('settle');
+  });
+
+  it('settlement: village pack applied via Thyra', async () => {
+    const res = await jsonPost(
+      app,
+      `/api/conversations/${conversationId}/settle`,
+      {},
+    );
+    const json = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    expect(json.ok).toBe(true);
+
+    const data = json.data as Record<string, unknown>;
+    expect(data.target).toBe('village_pack');
+    expect(data.status).toBe('applied');
+
+    // Thyra called once
+    expect((thyra as unknown as Record<string, ReturnType<typeof vi.fn>>).applyVillagePack).toHaveBeenCalledTimes(1);
+
+    // YAML contains hard enforcement rule
+    const yamlPayload = data.yaml as string;
+    expect(yamlPayload).toContain('enforcement: hard');
+
+    // Settlement record in DB
+    const settlement = db
+      .query('SELECT status FROM settlements WHERE conversation_id = ?')
+      .get(conversationId) as Record<string, unknown>;
+    expect(settlement.status).toBe('applied');
+  });
+
+  it('final state: 14 messages, card v7, settlement applied', () => {
+    // 7 user + 7 assistant = 14 messages
+    const messages = db
+      .query(
+        'SELECT role FROM messages WHERE conversation_id = ? ORDER BY created_at',
+      )
+      .all(conversationId) as Record<string, unknown>[];
+    expect(messages).toHaveLength(14);
+
+    // Card final version = 7 (create=v1, 6 updates=v2..v7)
+    const card = db
+      .query(
+        'SELECT version FROM cards WHERE conversation_id = ? ORDER BY version DESC LIMIT 1',
+      )
+      .get(conversationId) as Record<string, unknown>;
+    expect(card.version).toBe(7);
+
+    // Phase is settle
+    const conv = db
+      .query('SELECT phase FROM conversations WHERE id = ?')
+      .get(conversationId) as Record<string, unknown>;
+    expect(conv.phase).toBe('settle');
   });
 });
