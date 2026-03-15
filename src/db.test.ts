@@ -20,7 +20,7 @@ describe('DB Layer — initSchema', () => {
     initSchema(db);
   });
 
-  it('creates all 4 tables', () => {
+  it('creates all 5 tables', () => {
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all() as { name: string }[];
@@ -28,6 +28,7 @@ describe('DB Layer — initSchema', () => {
     expect(names).toContain('conversations');
     expect(names).toContain('messages');
     expect(names).toContain('cards');
+    expect(names).toContain('card_diffs');
     expect(names).toContain('settlements');
   });
 
@@ -155,6 +156,35 @@ describe('DB Layer — initSchema', () => {
     expect(() => {
       db.run(
         "INSERT INTO settlements (id, conversation_id, card_id, target, payload) VALUES ('s1', 'c1', 'k1', 'invalid_target', '{}')"
+      );
+    }).toThrow();
+  });
+
+  // ── card_diffs ──
+
+  it('can insert a card_diff with FK', () => {
+    db.run("INSERT INTO conversations (id, mode) VALUES ('c1', 'world_design')");
+    db.run(
+      "INSERT INTO cards (id, conversation_id, type, content) VALUES ('k1', 'c1', 'world', '{}')"
+    );
+    const diff = JSON.stringify({ added: ['goal'], removed: [], changed: [] });
+    db.run(
+      "INSERT INTO card_diffs (id, card_id, from_version, to_version, diff) VALUES ('d1', 'k1', 1, 2, ?)",
+      [diff]
+    );
+    const row = db
+      .prepare("SELECT * FROM card_diffs WHERE id = 'd1'")
+      .get() as Record<string, unknown>;
+    expect(row.card_id).toBe('k1');
+    expect(row.from_version).toBe(1);
+    expect(row.to_version).toBe(2);
+    expect(JSON.parse(row.diff as string)).toHaveProperty('added');
+  });
+
+  it('rejects card_diff with invalid card_id FK', () => {
+    expect(() => {
+      db.run(
+        "INSERT INTO card_diffs (id, card_id, from_version, to_version, diff) VALUES ('d1', 'nonexistent', 1, 2, '{}')"
       );
     }).toThrow();
   });
