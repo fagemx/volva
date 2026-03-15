@@ -16,6 +16,7 @@ export interface TurnResult {
   phaseChanged: boolean;
   strategy: Strategy;
   cardVersion: number;
+  detectedMode?: ConversationMode;
 }
 
 // ─── Empty Card Factories ───
@@ -231,16 +232,27 @@ export async function handleTurn(
   currentPhase: Phase,
   mode: ConversationMode = 'world_design',
 ): Promise<TurnResult> {
-  const cardType = modeToCardType(mode);
   const currentCard = cardManager.getLatest(conversationId);
+  const isFirstTurn = !currentCard;
   const cardContent = currentCard ? currentCard.content : createEmptyCard(mode);
   const cardSnapshot = JSON.stringify(cardContent, null, 2);
 
   // LLM #1: parse intent
   const intent = await parseIntent(llm, userMessage, cardSnapshot);
 
+  // Auto-detect mode on first turn if LLM returned detected_mode
+  let effectiveMode = mode;
+  let detectedMode: ConversationMode | undefined;
+  if (isFirstTurn && intent.detected_mode) {
+    effectiveMode = intent.detected_mode;
+    detectedMode = intent.detected_mode;
+  }
+
+  const cardType = modeToCardType(effectiveMode);
+  const effectiveCardContent = isFirstTurn ? createEmptyCard(effectiveMode) : cardContent;
+
   // Update card content based on intent
-  const updatedContent = applyIntent(cardType, cardContent, intent);
+  const updatedContent = applyIntent(cardType, effectiveCardContent, intent);
 
   // Persist card
   let cardVersion: number;
@@ -257,7 +269,7 @@ export async function handleTurn(
 
   // Pick reply strategy
   const hasPending = cardHasPending(cardType, updatedContent);
-  const strategy = pickStrategy(transition.newPhase, intent.type, hasPending, mode);
+  const strategy = pickStrategy(transition.newPhase, intent.type, hasPending, effectiveMode);
 
   // LLM #2: generate reply
   const reply = await generateReply(llm, strategy, JSON.stringify(updatedContent, null, 2), userMessage);
@@ -269,5 +281,6 @@ export async function handleTurn(
     phaseChanged: transition.reason !== null,
     strategy,
     cardVersion,
+    ...(detectedMode !== undefined && { detectedMode }),
   };
 }

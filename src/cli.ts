@@ -6,6 +6,7 @@ import { classifySettlement } from './settlement/router';
 import { buildVillagePack } from './settlement/village-pack-builder';
 import { ThyraClient } from './thyra-client/client';
 import type { Phase } from './conductor/state-machine';
+import type { ConversationMode } from './schemas/conversation';
 import type { WorldCard } from './schemas/card';
 
 async function runCli() {
@@ -22,6 +23,7 @@ async function runCli() {
   );
 
   let phase: Phase = 'explore';
+  let mode: ConversationMode = 'world_design';
   let turn = 0;
   let awaitingSettleConfirm = false;
   let pendingSettlementId: string | null = null;
@@ -102,9 +104,17 @@ async function runCli() {
       conversationId,
       input,
       phase,
-      'world_design',
+      mode,
     );
     phase = result.phase;
+
+    if (result.detectedMode) {
+      mode = result.detectedMode;
+      db.run(
+        "UPDATE conversations SET mode = ?, updated_at = datetime('now') WHERE id = ?",
+        [mode, conversationId],
+      );
+    }
 
     db.run(
       'INSERT INTO messages (id, conversation_id, role, content, turn) VALUES (?, ?, ?, ?, ?)',

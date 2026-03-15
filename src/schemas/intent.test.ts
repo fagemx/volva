@@ -102,4 +102,47 @@ describe('IntentSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts detected_mode with valid value', () => {
+    const result = IntentSchema.safeParse({
+      type: 'new_intent',
+      summary: '設定每週自動發文',
+      detected_mode: 'workflow_design',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.detected_mode).toBe('workflow_design');
+    }
+  });
+
+  it('accepts intent without detected_mode (optional)', () => {
+    const result = IntentSchema.safeParse({
+      type: 'new_intent',
+      summary: 'test',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.detected_mode).toBeUndefined();
+    }
+  });
+
+  it('rejects invalid detected_mode value', () => {
+    const result = IntentSchema.safeParse({
+      type: 'new_intent',
+      summary: 'test',
+      detected_mode: 'invalid_mode',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts all three valid detected_mode values', () => {
+    for (const mode of ['world_design', 'workflow_design', 'task']) {
+      const result = IntentSchema.safeParse({
+        type: 'new_intent',
+        summary: 'test',
+        detected_mode: mode,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
 });

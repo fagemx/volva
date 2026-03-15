@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ConversationMode } from './conversation';
 
 export const IntentType = z.enum([
   'new_intent',
@@ -20,5 +21,6 @@ export const IntentSchema = z.object({
   entities: z.record(z.string()).optional(),
   enforcement: z.enum(['hard', 'soft']).optional(),
   signals: z.array(z.string()).optional(),
+  detected_mode: ConversationMode.optional(),
 });
 export type Intent = z.infer<typeof IntentSchema>;
