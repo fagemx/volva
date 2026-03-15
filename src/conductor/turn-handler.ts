@@ -78,6 +78,30 @@ export function createEmptyCard(mode: ConversationMode): AnyCard {
   }
 }
 
+// ─── Modify Rule Helper ───
+
+function applyModifyRule(updated: WorldCard, intent: Intent): void {
+  if (!intent.entities?.target_rule) return;
+
+  const targetRule = intent.entities.target_rule;
+
+  for (const rule of updated.confirmed.hard_rules) {
+    if (rule.description.includes(targetRule)) {
+      rule.description = `[changed] ${intent.summary}`;
+      return;
+    }
+  }
+
+  for (const rule of updated.confirmed.soft_rules) {
+    if (rule.description.includes(targetRule)) {
+      rule.description = `[changed] ${intent.summary}`;
+      return;
+    }
+  }
+
+  updated.confirmed.soft_rules.push({ description: `[new] ${intent.summary}`, scope: ['*'] });
+}
+
 // ─── Intent Apply Functions ───
 
 export function applyIntentToCard(card: WorldCard, intent: Intent): WorldCard {
@@ -112,9 +136,11 @@ export function applyIntentToCard(card: WorldCard, intent: Intent): WorldCard {
       }
       updated.chief_draft.style = intent.summary;
       break;
+    case 'modify':
+      applyModifyRule(updated, intent);
+      break;
     case 'confirm':
     case 'settle_signal':
-    case 'modify':
     case 'question':
     case 'off_topic':
       break;

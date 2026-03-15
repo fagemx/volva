@@ -23,6 +23,9 @@ function createMockThyra() {
     createChief: vi.fn(),
     createSkill: vi.fn(),
     getHealth: vi.fn(),
+    getVillage: vi.fn(),
+    getActiveConstitution: vi.fn(),
+    getChiefs: vi.fn(),
   } as unknown as ThyraClient;
 }
 
@@ -32,7 +35,7 @@ function createTestApp(llm: LLMClient, thyra: ThyraClient) {
   const cardManager = new CardManager(db);
 
   const app = new Hono();
-  app.route('/', conversationRoutes({ db, llm, cardManager }));
+  app.route('/', conversationRoutes({ db, llm, cardManager, thyra }));
   app.route('/', cardRoutes({ cardManager }));
   app.route('/', settlementRoutes({ db, cardManager, thyra }));
 
@@ -297,6 +300,219 @@ describe('API-01: Response format', () => {
     const err = json.error as Record<string, unknown>;
     expect(err).toHaveProperty('code');
     expect(err).toHaveProperty('message');
+  });
+});
+
+// ─── W2: Existing Village Loading ───
+
+describe('W2: Existing Village Loading', () => {
+  it('creates conversation with village_id and pre-populated card', async () => {
+    const llm = createMockLlm();
+    const thyra = createMockThyra();
+    const { app, db } = createTestApp(llm, thyra);
+
+    (thyra.getVillage as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      id: 'v-1', name: 'My Village', target_repo: 'org/repo',
+    });
+    (thyra.getActiveConstitution as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      id: 'c-1', village_id: 'v-1',
+      rules: [
+        { description: 'No direct DB access', enforcement: 'hard', scope: ['*'] },
+        { description: 'Prefer async', enforcement: 'soft', scope: ['api'] },
+      ],
+    });
+    (thyra.getChiefs as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      { id: 'ch-1', village_id: 'v-1', name: 'Support Chief', role: 'support', personality: 'kind' },
+    ]);
+
+    const res = await jsonPost(app, '/api/conversations', {
+      village_id: 'v-1',
+    });
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(201);
+    expect(json.ok).toBe(true);
+
+    const data = json.data as Record<string, unknown>;
+    expect(data.village_id).toBe('v-1');
+    expect(data.preloaded).toBe(true);
+    expect(data.phase).toBe('explore');
+
+    // Verify village_id stored in DB
+    const conv = db
+      .query('SELECT village_id FROM conversations WHERE id = ?')
+      .get(data.id as string) as Record<string, unknown>;
+    expect(conv.village_id).toBe('v-1');
+
+    // Verify card was pre-populated
+    const cardRes = await app.request(`/api/conversations/${data.id as string}/card`);
+    const cardJson = (await cardRes.json()) as Record<string, unknown>;
+    const cardData = cardJson.data as Record<string, unknown>;
+    expect(cardData).not.toBeNull();
+
+    const content = cardData.content as Record<string, unknown>;
+    expect(content.goal).toBe('Modify: My Village');
+    expect(content.target_repo).toBe('org/repo');
+
+    const confirmed = content.confirmed as Record<string, unknown>;
+    const hardRules = confirmed.hard_rules as Record<string, unknown>[];
+    expect(hardRules).toHaveLength(1);
+    expect(hardRules[0].description).toBe('[existing] No direct DB access');
+
+    const softRules = confirmed.soft_rules as Record<string, unknown>[];
+    expect(softRules).toHaveLength(1);
+    expect(softRules[0].description).toBe('[existing] Prefer async');
+
+    const chiefDraft = content.chief_draft as Record<string, unknown>;
+    expect(chiefDraft.name).toBe('Support Chief');
+  });
+
+  it('returns graceful error when Thyra is unavailable', async () => {
+    const llm = createMockLlm();
+    const thyra = createMockThyra();
+    const { app } = createTestApp(llm, thyra);
+
+    (thyra.getVillage as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Connection refused'),
+    );
+
+    const res = await jsonPost(app, '/api/conversations', {
+      village_id: 'v-1',
+    });
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(502);
+    expect(json.ok).toBe(false);
+
+    const err = json.error as Record<string, unknown>;
+    expect(err.code).toBe('THYRA_UNAVAILABLE');
+  });
+
+  it('creates normal conversation when no village_id provided', async () => {
+    const llm = createMockLlm();
+    const thyra = createMockThyra();
+    const { app } = createTestApp(llm, thyra);
+
+    const res = await jsonPost(app, '/api/conversations', {});
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(201);
+    const data = json.data as Record<string, unknown>;
+    expect(data.village_id).toBeNull();
+    expect(data.preloaded).toBe(false);
+  });
+});
+
+// ─── Modify Intent ───
+
+describe('Modify intent in card updates', () => {
+  it('modifies existing rule when target_rule matches', async () => {
+    const llm = createMockLlm();
+    const thyra = createMockThyra();
+    const { app } = createTestApp(llm, thyra);
+
+    // Set up village with existing rules
+    (thyra.getVillage as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      id: 'v-1', name: 'Village', target_repo: 'repo',
+    });
+    (thyra.getActiveConstitution as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      id: 'c-1', village_id: 'v-1',
+      rules: [
+        { description: 'No direct DB access', enforcement: 'hard', scope: ['*'] },
+      ],
+    });
+    (thyra.getChiefs as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
+
+    const createRes = await jsonPost(app, '/api/conversations', {
+      village_id: 'v-1',
+    });
+    const createJson = (await createRes.json()) as Record<string, unknown>;
+    const convData = createJson.data as Record<string, unknown>;
+    const conversationId = convData.id as string;
+
+    // Mock LLM for modify intent
+    (llm.generateStructured as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      data: {
+        type: 'modify',
+        summary: 'Allow read-only DB access',
+        entities: { target_rule: 'No direct DB access' },
+      },
+    });
+    (llm.generateText as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      'Updated the rule.',
+    );
+
+    const msgRes = await jsonPost(
+      app,
+      `/api/conversations/${conversationId}/messages`,
+      { content: 'Change the DB rule to allow read-only access' },
+    );
+    expect(msgRes.status).toBe(200);
+
+    // Check card
+    const cardRes = await app.request(`/api/conversations/${conversationId}/card`);
+    const cardJson = (await cardRes.json()) as Record<string, unknown>;
+    const cardData = cardJson.data as Record<string, unknown>;
+    const content = cardData.content as Record<string, unknown>;
+    const confirmed = content.confirmed as Record<string, unknown>;
+    const hardRules = confirmed.hard_rules as Record<string, unknown>[];
+
+    expect(hardRules).toHaveLength(1);
+    expect(hardRules[0].description).toBe('[changed] Allow read-only DB access');
+  });
+
+  it('adds new rule when target_rule does not match', async () => {
+    const llm = createMockLlm();
+    const thyra = createMockThyra();
+    const { app } = createTestApp(llm, thyra);
+
+    // Set up village with no rules
+    (thyra.getVillage as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      id: 'v-2', name: 'Village2', target_repo: 'repo2',
+    });
+    (thyra.getActiveConstitution as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      id: 'c-2', village_id: 'v-2', rules: [],
+    });
+    (thyra.getChiefs as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
+
+    const createRes = await jsonPost(app, '/api/conversations', {
+      village_id: 'v-2',
+    });
+    const createJson = (await createRes.json()) as Record<string, unknown>;
+    const convData = createJson.data as Record<string, unknown>;
+    const conversationId = convData.id as string;
+
+    // Mock LLM for modify intent with non-matching target
+    (llm.generateStructured as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      data: {
+        type: 'modify',
+        summary: 'Must use HTTPS',
+        entities: { target_rule: 'nonexistent rule' },
+      },
+    });
+    (llm.generateText as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      'Added new rule.',
+    );
+
+    const msgRes = await jsonPost(
+      app,
+      `/api/conversations/${conversationId}/messages`,
+      { content: 'Add a rule about HTTPS' },
+    );
+    expect(msgRes.status).toBe(200);
+
+    // Check card
+    const cardRes = await app.request(`/api/conversations/${conversationId}/card`);
+    const cardJson = (await cardRes.json()) as Record<string, unknown>;
+    const cardData = cardJson.data as Record<string, unknown>;
+    const content = cardData.content as Record<string, unknown>;
+    const confirmed = content.confirmed as Record<string, unknown>;
+    const softRules = confirmed.soft_rules as Record<string, unknown>[];
+
+    expect(softRules).toHaveLength(1);
+    expect(softRules[0].description).toBe('[new] Must use HTTPS');
   });
 });
 

@@ -72,6 +72,51 @@ describe('URL construction', () => {
     expect(capturedUrl).toBe('http://localhost:3462/api/skills');
   });
 
+  it('getVillage → GET /api/villages/:id', async () => {
+    let capturedUrl = '';
+    let capturedMethod = '';
+    const client = new ThyraClient({
+      fetchFn: mockFetch((url, init) => {
+        capturedUrl = url;
+        capturedMethod = init?.method ?? 'GET';
+        return jsonResponse({ ok: true, data: { id: 'v1', name: 'Test', target_repo: 'repo' } });
+      }),
+    });
+    await client.getVillage('v1');
+    expect(capturedUrl).toBe('http://localhost:3462/api/villages/v1');
+    expect(capturedMethod).toBe('GET');
+  });
+
+  it('getActiveConstitution → GET /api/villages/:id/constitutions/active', async () => {
+    let capturedUrl = '';
+    const client = new ThyraClient({
+      fetchFn: mockFetch((url) => {
+        capturedUrl = url;
+        return jsonResponse({
+          ok: true,
+          data: { id: 'c1', village_id: 'v1', rules: [] },
+        });
+      }),
+    });
+    await client.getActiveConstitution('v1');
+    expect(capturedUrl).toBe('http://localhost:3462/api/villages/v1/constitutions/active');
+  });
+
+  it('getChiefs → GET /api/villages/:id/chiefs', async () => {
+    let capturedUrl = '';
+    const client = new ThyraClient({
+      fetchFn: mockFetch((url) => {
+        capturedUrl = url;
+        return jsonResponse({
+          ok: true,
+          data: [{ id: 'ch1', village_id: 'v1', name: 'Chief' }],
+        });
+      }),
+    });
+    await client.getChiefs('v1');
+    expect(capturedUrl).toBe('http://localhost:3462/api/villages/v1/chiefs');
+  });
+
   it('applyVillagePack → POST /api/villages/pack/apply', async () => {
     let capturedUrl = '';
     let capturedBody = '';
@@ -116,6 +161,56 @@ describe('URL construction', () => {
 // ─── Success Response Parsing ───
 
 describe('success response parsing', () => {
+  it('getVillage returns typed VillageData', async () => {
+    const client = new ThyraClient({
+      fetchFn: mockFetch(() =>
+        jsonResponse({ ok: true, data: { id: 'v1', name: 'Test', target_repo: 'repo' } })
+      ),
+    });
+    const result = await client.getVillage('v1');
+    expect(result).toEqual({ id: 'v1', name: 'Test', target_repo: 'repo' });
+  });
+
+  it('getActiveConstitution returns typed ActiveConstitutionData', async () => {
+    const client = new ThyraClient({
+      fetchFn: mockFetch(() =>
+        jsonResponse({
+          ok: true,
+          data: {
+            id: 'c1',
+            village_id: 'v1',
+            rules: [
+              { description: 'No direct DB', enforcement: 'hard', scope: ['*'] },
+            ],
+            budget_limits: { max_cost_per_action: 0.5, max_cost_per_day: 10, max_cost_per_loop: 2 },
+          },
+        })
+      ),
+    });
+    const result = await client.getActiveConstitution('v1');
+    expect(result.id).toBe('c1');
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].enforcement).toBe('hard');
+    expect(result.budget_limits?.max_cost_per_action).toBe(0.5);
+  });
+
+  it('getChiefs returns typed ChiefData array', async () => {
+    const client = new ThyraClient({
+      fetchFn: mockFetch(() =>
+        jsonResponse({
+          ok: true,
+          data: [
+            { id: 'ch1', village_id: 'v1', name: 'Chief', role: 'support', personality: 'kind' },
+          ],
+        })
+      ),
+    });
+    const result = await client.getChiefs('v1');
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Chief');
+    expect(result[0].role).toBe('support');
+  });
+
   it('createVillage returns typed VillageData', async () => {
     const client = new ThyraClient({
       fetchFn: mockFetch(() =>
