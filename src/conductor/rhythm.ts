@@ -17,5 +17,9 @@ export function pickStrategy(phase: Phase, intentType: IntentType, hasPending: b
       if (intentType === 'settle_signal') return 'settle';
       if (intentType === 'confirm') return 'settle';
       return 'confirm';
+    default: {
+      const exhaustiveCheck: never = phase;
+      throw new Error(`Unknown phase: ${String(exhaustiveCheck)}`);
+    }
   }
 }

@@ -5,22 +5,26 @@ export function classifySettlement(
   cardType: CardType,
   card: AnyCard,
 ): SettlementTarget | null {
-  if (cardType === 'world') {
-    const worldCard = card as WorldCard;
-    if (worldCard.confirmed.hard_rules.length > 0 || worldCard.chief_draft !== null) {
-      return 'village_pack';
+  switch (cardType) {
+    case 'world': {
+      const worldCard = card as WorldCard;
+      if (worldCard.confirmed.hard_rules.length > 0 || worldCard.chief_draft !== null) {
+        return 'village_pack';
+      }
+      return null;
     }
-    return null;
-  }
-
-  if (cardType === 'workflow') {
-    const workflowCard = card as WorkflowCard;
-    if (workflowCard.steps.length > 0) {
-      return 'workflow';
+    case 'workflow': {
+      const workflowCard = card as WorkflowCard;
+      if (workflowCard.steps.length > 0) {
+        return 'workflow';
+      }
+      return null;
     }
-    return null;
+    case 'task':
+      return 'task';
+    default: {
+      const exhaustiveCheck: never = cardType;
+      throw new Error(`Unknown card type: ${String(exhaustiveCheck)}`);
+    }
   }
-
-  // cardType === 'task'
-  return 'task';
 }
