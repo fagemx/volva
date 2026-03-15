@@ -22,7 +22,7 @@ export interface LLMStructuredOptions<T extends z.ZodType> extends LLMCallOption
  * Handles: bare JSON, markdown-fenced JSON, JSON with surrounding text.
  */
 export function extractJson(raw: string): string {
-  let str = raw.trim();
+  const str = raw.trim();
 
   // Strip markdown code fences (case-insensitive)
   const fenceMatch = str.match(/^```\s*(?:json)?\s*\n([\s\S]*?)\n?\s*```\s*$/i);
@@ -95,7 +95,7 @@ export class LLMClient {
       }
 
       const jsonStr = extractJson(textBlock.text);
-      const parsed = JSON.parse(jsonStr);
+      const parsed: unknown = JSON.parse(jsonStr);
       const validated = options.schema.safeParse(parsed);
 
       if (!validated.success) {
@@ -105,6 +105,7 @@ export class LLMClient {
         };
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- Zod safeParse guarantees type safety at runtime
       return { ok: true, data: validated.data };
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';

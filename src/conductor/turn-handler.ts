@@ -81,7 +81,7 @@ export async function handleTurn(
   currentPhase: Phase,
 ): Promise<TurnResult> {
   const currentCard = cardManager.getLatest(conversationId);
-  const cardContent = (currentCard?.content as WorldCard) ?? createEmptyWorldCard();
+  const cardContent = currentCard ? (currentCard.content as WorldCard) : createEmptyWorldCard();
   const cardSnapshot = JSON.stringify(cardContent, null, 2);
 
   // LLM #1: parse intent

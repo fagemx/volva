@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { applyIntentToCard, createEmptyWorldCard, handleTurn } from './turn-handler';
 import { CardManager } from '../cards/card-manager';
 import type { LLMClient } from '../llm/client';
-import type { Intent } from '../schemas/intent';
 
 // ─── applyIntentToCard Tests ───
 
