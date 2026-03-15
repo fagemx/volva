@@ -9,8 +9,9 @@ function makeCard(opts: {
 }): WorldCard {
   return {
     goal: 'test',
+    target_repo: null,
     confirmed: {
-      hard_rules: opts.hardRules ?? [],
+      hard_rules: (opts.hardRules ?? []).map((r) => ({ description: r, scope: ['*'] })),
       soft_rules: [],
       must_have: opts.mustHave ?? [],
       success_criteria: [],

@@ -25,9 +25,10 @@ describe('CardTypeEnum', () => {
 describe('WorldCardSchema', () => {
   const validWorldCard = {
     goal: 'Build an automated customer service',
+    target_repo: 'github.com/example/repo',
     confirmed: {
-      hard_rules: ['No refunds without human approval'],
-      soft_rules: ['Avoid robotic tone'],
+      hard_rules: [{ description: 'No refunds without human approval', scope: ['*'] }],
+      soft_rules: [{ description: 'Avoid robotic tone', scope: ['*'] }],
       must_have: ['24/7 availability'],
       success_criteria: ['90% satisfaction rate'],
     },
@@ -55,6 +56,7 @@ describe('WorldCardSchema', () => {
   it('parses WorldCard with all nullable fields set to null', () => {
     const result = WorldCardSchema.safeParse({
       goal: null,
+      target_repo: null,
       confirmed: {
         hard_rules: [],
         soft_rules: [],

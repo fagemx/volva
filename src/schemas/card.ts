@@ -14,11 +14,19 @@ const PendingItemSchema = z.object({
 
 // ─── WorldCard ───
 
+export const RuleSchema = z.object({
+  description: z.string(),
+  scope: z.array(z.string()).default(['*']),
+});
+
+export type Rule = z.infer<typeof RuleSchema>;
+
 export const WorldCardSchema = z.object({
   goal: z.string().nullable(),
+  target_repo: z.string().nullable(),
   confirmed: z.object({
-    hard_rules: z.array(z.string()),
-    soft_rules: z.array(z.string()),
+    hard_rules: z.array(RuleSchema),
+    soft_rules: z.array(RuleSchema),
     must_have: z.array(z.string()),
     success_criteria: z.array(z.string()),
   }),

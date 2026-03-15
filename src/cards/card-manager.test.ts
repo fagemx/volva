@@ -6,6 +6,7 @@ import type { WorldCard } from '../schemas/card';
 
 const minimalWorldCard: WorldCard = {
   goal: null,
+  target_repo: null,
   confirmed: {
     hard_rules: [],
     soft_rules: [],
@@ -21,9 +22,10 @@ const minimalWorldCard: WorldCard = {
 
 const fullWorldCard: WorldCard = {
   goal: 'Build automated customer service',
+  target_repo: 'github.com/example/repo',
   confirmed: {
-    hard_rules: ['No refunds without human approval'],
-    soft_rules: ['Avoid robotic tone'],
+    hard_rules: [{ description: 'No refunds without human approval', scope: ['*'] }],
+    soft_rules: [{ description: 'Avoid robotic tone', scope: ['*'] }],
     must_have: ['24/7 availability'],
     success_criteria: ['90% satisfaction'],
   },
@@ -155,8 +157,8 @@ describe('computeDiff', () => {
 
   it('detects nested changes', () => {
     const diff = computeDiff(
-      { confirmed: { hard_rules: ['rule1'] } },
-      { confirmed: { hard_rules: ['rule1', 'rule2'] } },
+      { confirmed: { hard_rules: [{ description: 'rule1', scope: ['*'] }] } },
+      { confirmed: { hard_rules: [{ description: 'rule1', scope: ['*'] }, { description: 'rule2', scope: ['*'] }] } },
     );
     expect(diff.changed.some(p => p.includes('hard_rules'))).toBe(true);
   });

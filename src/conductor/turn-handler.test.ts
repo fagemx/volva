@@ -34,7 +34,7 @@ describe('applyIntentToCard', () => {
       summary: '退款必須人工',
       enforcement: 'hard',
     });
-    expect(result.confirmed.hard_rules).toContain('退款必須人工');
+    expect(result.confirmed.hard_rules).toContainEqual({ description: '退款必須人工', scope: ['*'] });
   });
 
   it('set_boundary with enforcement=soft adds to soft_rules', () => {
@@ -44,7 +44,7 @@ describe('applyIntentToCard', () => {
       summary: '最好友善',
       enforcement: 'soft',
     });
-    expect(result.confirmed.soft_rules).toContain('最好友善');
+    expect(result.confirmed.soft_rules).toContainEqual({ description: '最好友善', scope: ['*'] });
   });
 
   it('style_preference initializes chief_draft and sets style', () => {
