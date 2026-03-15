@@ -69,7 +69,6 @@ export function applyIntentToCard(card: WorldCard, intent: Intent): WorldCard {
       break;
   }
 
-  updated.version += 1;
   return updated;
 }
 

@@ -56,24 +56,24 @@ describe('applyIntentToCard', () => {
     expect(result.chief_draft!.style).toBe('親切但不隨便');
   });
 
-  it('confirm does not change card content (except version)', () => {
+  it('confirm does not change card content', () => {
     const card = createEmptyWorldCard();
     const result = applyIntentToCard(card, {
       type: 'confirm',
       summary: '好',
     });
     expect(result.goal).toBeNull();
-    expect(result.version).toBe(card.version + 1);
+    expect(result.version).toBe(card.version);
   });
 
-  it('increments version', () => {
+  it('does not increment version (CardManager owns versioning)', () => {
     const card = createEmptyWorldCard();
     expect(card.version).toBe(1);
     const result = applyIntentToCard(card, {
-      type: 'confirm',
-      summary: '好',
+      type: 'new_intent',
+      summary: '測試',
     });
-    expect(result.version).toBe(2);
+    expect(result.version).toBe(1);
   });
 });
 
