@@ -5,7 +5,9 @@ import type { CardManager } from '../cards/card-manager';
 import type { ThyraClient } from '../thyra-client/client';
 import { classifySettlement } from '../settlement/router';
 import { buildVillagePack } from '../settlement/village-pack-builder';
-import type { WorldCard } from '../schemas/card';
+import { buildWorkflowSpec } from '../settlement/workflow-spec-builder';
+import { buildTaskSpec } from '../settlement/task-spec-builder';
+import type { WorldCard, WorkflowCard, TaskCard } from '../schemas/card';
 
 export interface SettlementDeps {
   db: Database;
@@ -57,7 +59,24 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
       return ok(c, { id: settlementId, target, payload: yaml, status: 'draft' });
     }
 
-    return ok(c, { target, status: 'unsupported' });
+    if (target === 'workflow') {
+      const yaml = buildWorkflowSpec(card.content as WorkflowCard);
+      const settlementId = crypto.randomUUID();
+      deps.db.run(
+        'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [settlementId, conversationId, card.id, target, yaml, 'draft'],
+      );
+      return ok(c, { id: settlementId, target, payload: yaml, status: 'draft' });
+    }
+
+    // target === 'task'
+    const json = buildTaskSpec(card.content as TaskCard);
+    const settlementId = crypto.randomUUID();
+    deps.db.run(
+      'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
+      [settlementId, conversationId, card.id, target, json, 'draft'],
+    );
+    return ok(c, { id: settlementId, target, payload: json, status: 'draft' });
   });
 
   // POST /api/conversations/:id/settle/confirm — confirms a draft settlement
