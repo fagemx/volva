@@ -24,7 +24,7 @@ async function runCli() {
   let phase: Phase = 'explore';
   let turn = 0;
   let awaitingSettleConfirm = false;
-  let pendingYaml: string | null = null;
+  let pendingSettlementId: string | null = null;
 
   console.log('Volva CLI — type your thoughts, q to quit\n');
 
@@ -34,7 +34,7 @@ async function runCli() {
     if (!input) continue;
 
     // Handle settlement confirmation
-    if (awaitingSettleConfirm) {
+    if (awaitingSettleConfirm && pendingSettlementId) {
       turn += 1;
       db.run(
         'INSERT INTO messages (id, conversation_id, role, content, turn) VALUES (?, ?, ?, ?, ?)',
@@ -43,17 +43,36 @@ async function runCli() {
 
       let settleReply: string;
       if (input === 'y' || input === 'yes') {
-        if (pendingYaml) {
+        const settlement = db
+          .query('SELECT * FROM settlements WHERE id = ? AND status = ?')
+          .get(pendingSettlementId, 'draft') as Record<string, unknown> | null;
+
+        if (settlement) {
+          // Transition: draft -> confirmed
+          db.run(
+            'UPDATE settlements SET status = ? WHERE id = ?',
+            ['confirmed', pendingSettlementId],
+          );
           try {
-            const result = await thyra.applyVillagePack(pendingYaml);
+            const result = await thyra.applyVillagePack(settlement.payload as string);
+            // Transition: confirmed -> applied
+            db.run(
+              'UPDATE settlements SET status = ?, thyra_response = ? WHERE id = ?',
+              ['applied', JSON.stringify(result), pendingSettlementId],
+            );
             settleReply = 'Village Pack applied successfully. ' + JSON.stringify(result);
             console.log('\n' + settleReply);
           } catch (err) {
+            // Transition: confirmed -> failed
+            db.run(
+              'UPDATE settlements SET status = ? WHERE id = ?',
+              ['failed', pendingSettlementId],
+            );
             settleReply = 'Failed to apply Village Pack: ' + String(err);
             console.error('\n' + settleReply);
           }
         } else {
-          settleReply = 'No pending YAML to apply.';
+          settleReply = 'No draft settlement found.';
           console.log('\n' + settleReply);
         }
       } else {
@@ -67,7 +86,7 @@ async function runCli() {
       );
 
       awaitingSettleConfirm = false;
-      pendingYaml = null;
+      pendingSettlementId = null;
       continue;
     }
 
@@ -107,11 +126,16 @@ async function runCli() {
         const target = classifySettlement(card.type, card.content);
         if (target === 'village_pack') {
           const yaml = buildVillagePack(card.content as WorldCard);
+          const settlementId = crypto.randomUUID();
+          db.run(
+            'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
+            [settlementId, conversationId, card.id, target, yaml, 'draft'],
+          );
           console.log('\n--- Village Pack YAML ---\n');
           console.log(yaml);
           console.log('\nApply to Thyra? (y/n)');
           awaitingSettleConfirm = true;
-          pendingYaml = yaml;
+          pendingSettlementId = settlementId;
         }
       }
     }
