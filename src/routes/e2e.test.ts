@@ -521,7 +521,7 @@ describe('GP-2: Full W1 Scenario', () => {
     expect(conv.phase).toBe('settle');
   });
 
-  it('settlement: village pack applied via Thyra', async () => {
+  it('settlement: village pack draft created', async () => {
     const res = await jsonPost(
       app,
       `/api/conversations/${conversationId}/settle`,
@@ -533,16 +533,36 @@ describe('GP-2: Full W1 Scenario', () => {
 
     const data = json.data as Record<string, unknown>;
     expect(data.target).toBe('village_pack');
+    expect(data.status).toBe('draft');
+
+    // YAML contains hard enforcement rule
+    const yamlPayload = data.payload as string;
+    expect(yamlPayload).toContain('enforcement: hard');
+
+    // Settlement record in DB is draft
+    const settlement = db
+      .query('SELECT status FROM settlements WHERE conversation_id = ?')
+      .get(conversationId) as Record<string, unknown>;
+    expect(settlement.status).toBe('draft');
+  });
+
+  it('settlement: village pack applied via confirm', async () => {
+    const res = await jsonPost(
+      app,
+      `/api/conversations/${conversationId}/settle/confirm`,
+      {},
+    );
+    const json = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    expect(json.ok).toBe(true);
+
+    const data = json.data as Record<string, unknown>;
     expect(data.status).toBe('applied');
 
     // Thyra called once
     expect((thyra as unknown as Record<string, ReturnType<typeof vi.fn>>).applyVillagePack).toHaveBeenCalledTimes(1);
 
-    // YAML contains hard enforcement rule
-    const yamlPayload = data.yaml as string;
-    expect(yamlPayload).toContain('enforcement: hard');
-
-    // Settlement record in DB
+    // Settlement record in DB is applied
     const settlement = db
       .query('SELECT status FROM settlements WHERE conversation_id = ?')
       .get(conversationId) as Record<string, unknown>;
