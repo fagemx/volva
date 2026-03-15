@@ -1,4 +1,7 @@
 import type { WorldCard } from '../schemas/card';
+import type { IntentType } from '../schemas/intent';
+
+export type { IntentType } from '../schemas/intent';
 
 export type Phase = 'explore' | 'focus' | 'settle';
 
@@ -6,18 +9,6 @@ export interface TransitionResult {
   newPhase: Phase;
   reason: string | null;
 }
-
-export type IntentType =
-  | 'new_intent'
-  | 'add_info'
-  | 'set_boundary'
-  | 'add_constraint'
-  | 'style_preference'
-  | 'confirm'
-  | 'modify'
-  | 'settle_signal'
-  | 'question'
-  | 'off_topic';
 
 export function checkTransition(
   currentPhase: Phase,
