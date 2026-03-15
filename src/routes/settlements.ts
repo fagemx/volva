@@ -16,8 +16,8 @@ export interface SettlementDeps {
 export function settlementRoutes(deps: SettlementDeps): Hono {
   const app = new Hono();
 
-  // POST /api/conversations/:id/settle
-  app.post('/api/conversations/:id/settle', async (c) => {
+  // POST /api/conversations/:id/settle — creates a draft settlement record
+  app.post('/api/conversations/:id/settle', (c) => {
     const conversationId = c.req.param('id');
 
     const conv = deps.db
@@ -50,28 +50,60 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
     if (target === 'village_pack') {
       const yaml = buildVillagePack(card.content as WorldCard);
       const settlementId = crypto.randomUUID();
-      try {
-        const result = await deps.thyra.applyVillagePack(yaml);
-        deps.db.run(
-          'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status, thyra_response) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [settlementId, conversationId, card.id, target, yaml, 'applied', JSON.stringify(result)],
-        );
-        return ok(c, { target, yaml, status: 'applied', thyra: result });
-      } catch (err) {
-        deps.db.run(
-          'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
-          [settlementId, conversationId, card.id, target, yaml, 'failed'],
-        );
-        return error(
-          c,
-          'UPSTREAM_ERROR',
-          err instanceof Error ? err.message : 'Thyra API failed',
-          502,
-        );
-      }
+      deps.db.run(
+        'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [settlementId, conversationId, card.id, target, yaml, 'draft'],
+      );
+      return ok(c, { id: settlementId, target, payload: yaml, status: 'draft' });
     }
 
     return ok(c, { target, status: 'unsupported' });
+  });
+
+  // POST /api/conversations/:id/settle/confirm — confirms a draft settlement
+  app.post('/api/conversations/:id/settle/confirm', async (c) => {
+    const conversationId = c.req.param('id');
+
+    const settlement = deps.db
+      .query(
+        'SELECT * FROM settlements WHERE conversation_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1',
+      )
+      .get(conversationId, 'draft') as Record<string, unknown> | null;
+
+    if (!settlement) {
+      return error(c, 'NO_DRAFT', 'No draft settlement found', 404);
+    }
+
+    const settlementId = settlement.id as string;
+    const payload = settlement.payload as string;
+
+    // Transition: draft -> confirmed
+    deps.db.run(
+      'UPDATE settlements SET status = ? WHERE id = ?',
+      ['confirmed', settlementId],
+    );
+
+    try {
+      const result = await deps.thyra.applyVillagePack(payload);
+      // Transition: confirmed -> applied
+      deps.db.run(
+        'UPDATE settlements SET status = ?, thyra_response = ? WHERE id = ?',
+        ['applied', JSON.stringify(result), settlementId],
+      );
+      return ok(c, { id: settlementId, status: 'applied', thyra: result });
+    } catch (err) {
+      // Transition: confirmed -> failed
+      deps.db.run(
+        'UPDATE settlements SET status = ? WHERE id = ?',
+        ['failed', settlementId],
+      );
+      return error(
+        c,
+        'UPSTREAM_ERROR',
+        err instanceof Error ? err.message : 'Thyra API failed',
+        502,
+      );
+    }
   });
 
   return app;
