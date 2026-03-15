@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { checkTransition } from './state-machine';
-import type { WorldCard } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard } from '../schemas/card';
 
-function makeCard(opts: {
+function makeWorldCard(opts: {
   hardRules?: string[];
   mustHave?: string[];
   pendingCount?: number;
@@ -27,102 +27,249 @@ function makeCard(opts: {
   };
 }
 
-// Group 1: EXPLORE → FOCUS
+function makeWorkflowCard(opts: {
+  stepsCount?: number;
+  triggers?: string[];
+  pendingCount?: number;
+}): WorkflowCard {
+  return {
+    name: 'test-workflow',
+    purpose: 'testing',
+    steps: Array.from({ length: opts.stepsCount ?? 0 }, (_, i) => ({
+      order: i,
+      description: `step ${i}`,
+      skill: null,
+      conditions: null,
+    })),
+    confirmed: {
+      triggers: opts.triggers ?? [],
+      exit_conditions: [],
+      failure_handling: [],
+    },
+    pending: Array.from({ length: opts.pendingCount ?? 0 }, (_, i) => ({
+      question: `q${i}`,
+      context: `c${i}`,
+    })),
+    version: 1,
+  };
+}
 
-describe('EXPLORE → FOCUS transitions', () => {
-  it('explore → focus when hard_rule exists and must_have >= 3', () => {
-    const card = makeCard({ hardRules: ['r1'], mustHave: ['a', 'b', 'c'] });
-    const result = checkTransition('explore', card, 'add_info');
+function makeTaskCard(opts: {
+  intent?: string;
+  constraints?: string[];
+}): TaskCard {
+  return {
+    intent: opts.intent ?? '',
+    inputs: {},
+    constraints: opts.constraints ?? [],
+    success_condition: null,
+    version: 1,
+  };
+}
+
+// ─── WorldCard Transitions ───
+
+describe('WorldCard: EXPLORE -> FOCUS transitions', () => {
+  it('explore -> focus when hard_rule exists and must_have >= 3', () => {
+    const card = makeWorldCard({ hardRules: ['r1'], mustHave: ['a', 'b', 'c'] });
+    const result = checkTransition('explore', 'world', card, 'add_info');
     expect(result.newPhase).toBe('focus');
     expect(result.reason).not.toBeNull();
   });
 
-  it('explore → focus on set_boundary when must_have >= 2', () => {
-    const card = makeCard({ mustHave: ['a', 'b'] });
-    const result = checkTransition('explore', card, 'set_boundary');
+  it('explore -> focus on set_boundary when must_have >= 2', () => {
+    const card = makeWorldCard({ mustHave: ['a', 'b'] });
+    const result = checkTransition('explore', 'world', card, 'set_boundary');
     expect(result.newPhase).toBe('focus');
     expect(result.reason).not.toBeNull();
   });
 
   it('explore stays when must_have < 3 and no boundary', () => {
-    const card = makeCard({ mustHave: ['a'] });
-    const result = checkTransition('explore', card, 'add_info');
+    const card = makeWorldCard({ mustHave: ['a'] });
+    const result = checkTransition('explore', 'world', card, 'add_info');
     expect(result.newPhase).toBe('explore');
     expect(result.reason).toBeNull();
   });
 
   it('explore stays when set_boundary but must_have < 2', () => {
-    const card = makeCard({ mustHave: ['a'] });
-    const result = checkTransition('explore', card, 'set_boundary');
+    const card = makeWorldCard({ mustHave: ['a'] });
+    const result = checkTransition('explore', 'world', card, 'set_boundary');
     expect(result.newPhase).toBe('explore');
     expect(result.reason).toBeNull();
   });
 
   it('explore stays on settle_signal (cannot skip focus)', () => {
-    const card = makeCard({});
-    const result = checkTransition('explore', card, 'settle_signal');
+    const card = makeWorldCard({});
+    const result = checkTransition('explore', 'world', card, 'settle_signal');
     expect(result.newPhase).toBe('explore');
     expect(result.reason).toBeNull();
   });
 });
 
-// Group 2: FOCUS → SETTLE
-
-describe('FOCUS → SETTLE transitions', () => {
-  it('focus → settle when pending empty and confirm', () => {
-    const card = makeCard({ pendingCount: 0 });
-    const result = checkTransition('focus', card, 'confirm');
+describe('WorldCard: FOCUS -> SETTLE transitions', () => {
+  it('focus -> settle when pending empty and confirm', () => {
+    const card = makeWorldCard({ pendingCount: 0 });
+    const result = checkTransition('focus', 'world', card, 'confirm');
     expect(result.newPhase).toBe('settle');
     expect(result.reason).not.toBeNull();
   });
 
   it('focus stays when pending not empty and confirm', () => {
-    const card = makeCard({ pendingCount: 2 });
-    const result = checkTransition('focus', card, 'confirm');
+    const card = makeWorldCard({ pendingCount: 2 });
+    const result = checkTransition('focus', 'world', card, 'confirm');
     expect(result.newPhase).toBe('focus');
     expect(result.reason).toBeNull();
   });
 
-  it('focus → settle on explicit settle_signal', () => {
-    const card = makeCard({ pendingCount: 1 });
-    const result = checkTransition('focus', card, 'settle_signal');
+  it('focus -> settle on explicit settle_signal', () => {
+    const card = makeWorldCard({ pendingCount: 1 });
+    const result = checkTransition('focus', 'world', card, 'settle_signal');
     expect(result.newPhase).toBe('settle');
     expect(result.reason).not.toBeNull();
   });
 });
 
-// Group 3: Rollback transitions
-
-describe('Rollback transitions', () => {
-  it('focus → explore on new_intent (rollback)', () => {
-    const card = makeCard({});
-    const result = checkTransition('focus', card, 'new_intent');
+describe('WorldCard: Rollback transitions', () => {
+  it('focus -> explore on new_intent (rollback)', () => {
+    const card = makeWorldCard({});
+    const result = checkTransition('focus', 'world', card, 'new_intent');
     expect(result.newPhase).toBe('explore');
     expect(result.reason).not.toBeNull();
   });
 
-  it('settle → explore on new_intent (new cycle)', () => {
-    const card = makeCard({});
-    const result = checkTransition('settle', card, 'new_intent');
+  it('settle -> explore on new_intent (new cycle)', () => {
+    const card = makeWorldCard({});
+    const result = checkTransition('settle', 'world', card, 'new_intent');
     expect(result.newPhase).toBe('explore');
     expect(result.reason).not.toBeNull();
   });
 });
 
-// Group 4: No-transition cases
-
-describe('No-transition cases', () => {
+describe('WorldCard: No-transition cases', () => {
   it('settle stays on confirm (no transition)', () => {
-    const card = makeCard({});
-    const result = checkTransition('settle', card, 'confirm');
+    const card = makeWorldCard({});
+    const result = checkTransition('settle', 'world', card, 'confirm');
     expect(result.newPhase).toBe('settle');
     expect(result.reason).toBeNull();
   });
 
   it('explore stays on add_info with insufficient card state', () => {
-    const card = makeCard({});
-    const result = checkTransition('explore', card, 'add_info');
+    const card = makeWorldCard({});
+    const result = checkTransition('explore', 'world', card, 'add_info');
     expect(result.newPhase).toBe('explore');
     expect(result.reason).toBeNull();
+  });
+});
+
+// ─── WorkflowCard Transitions ───
+
+describe('WorkflowCard transitions', () => {
+  it('explore -> focus when steps + triggers exist', () => {
+    const card = makeWorkflowCard({ stepsCount: 2, triggers: ['on_message'] });
+    const result = checkTransition('explore', 'workflow', card, 'add_info');
+    expect(result.newPhase).toBe('focus');
+    expect(result.reason).toBe('steps defined + triggers set');
+  });
+
+  it('explore stays when no steps', () => {
+    const card = makeWorkflowCard({ triggers: ['on_message'] });
+    const result = checkTransition('explore', 'workflow', card, 'add_info');
+    expect(result.newPhase).toBe('explore');
+    expect(result.reason).toBeNull();
+  });
+
+  it('explore stays when no triggers', () => {
+    const card = makeWorkflowCard({ stepsCount: 2 });
+    const result = checkTransition('explore', 'workflow', card, 'add_info');
+    expect(result.newPhase).toBe('explore');
+    expect(result.reason).toBeNull();
+  });
+
+  it('focus -> settle on confirm with empty pending', () => {
+    const card = makeWorkflowCard({ stepsCount: 1, triggers: ['t1'], pendingCount: 0 });
+    const result = checkTransition('focus', 'workflow', card, 'confirm');
+    expect(result.newPhase).toBe('settle');
+    expect(result.reason).not.toBeNull();
+  });
+
+  it('focus -> settle on settle_signal', () => {
+    const card = makeWorkflowCard({ stepsCount: 1, triggers: ['t1'], pendingCount: 1 });
+    const result = checkTransition('focus', 'workflow', card, 'settle_signal');
+    expect(result.newPhase).toBe('settle');
+    expect(result.reason).not.toBeNull();
+  });
+
+  it('focus -> explore on new_intent (rollback)', () => {
+    const card = makeWorkflowCard({});
+    const result = checkTransition('focus', 'workflow', card, 'new_intent');
+    expect(result.newPhase).toBe('explore');
+    expect(result.reason).not.toBeNull();
+  });
+
+  it('settle -> explore on new_intent', () => {
+    const card = makeWorkflowCard({});
+    const result = checkTransition('settle', 'workflow', card, 'new_intent');
+    expect(result.newPhase).toBe('explore');
+    expect(result.reason).not.toBeNull();
+  });
+});
+
+// ─── TaskCard Transitions ───
+
+describe('TaskCard transitions', () => {
+  it('explore -> settle fast-path on confirm with intent set', () => {
+    const card = makeTaskCard({ intent: 'deploy to prod' });
+    const result = checkTransition('explore', 'task', card, 'confirm');
+    expect(result.newPhase).toBe('settle');
+    expect(result.reason).toBe('task intent set + user confirmed');
+  });
+
+  it('explore -> settle fast-path on settle_signal with intent set', () => {
+    const card = makeTaskCard({ intent: 'deploy to prod' });
+    const result = checkTransition('explore', 'task', card, 'settle_signal');
+    expect(result.newPhase).toBe('settle');
+    expect(result.reason).toBe('task intent set + user confirmed');
+  });
+
+  it('explore stays on confirm when intent is empty', () => {
+    const card = makeTaskCard({ intent: '' });
+    const result = checkTransition('explore', 'task', card, 'confirm');
+    expect(result.newPhase).toBe('explore');
+    expect(result.reason).toBeNull();
+  });
+
+  it('explore -> focus when constraints exist but no confirm', () => {
+    const card = makeTaskCard({ intent: 'test', constraints: ['no downtime'] });
+    const result = checkTransition('explore', 'task', card, 'add_info');
+    expect(result.newPhase).toBe('focus');
+    expect(result.reason).toBe('constraints defined');
+  });
+
+  it('focus -> settle on confirm', () => {
+    const card = makeTaskCard({ intent: 'test' });
+    const result = checkTransition('focus', 'task', card, 'confirm');
+    expect(result.newPhase).toBe('settle');
+    expect(result.reason).toBe('user confirmed task');
+  });
+
+  it('focus -> settle on settle_signal', () => {
+    const card = makeTaskCard({ intent: 'test' });
+    const result = checkTransition('focus', 'task', card, 'settle_signal');
+    expect(result.newPhase).toBe('settle');
+    expect(result.reason).toBe('user confirmed task');
+  });
+
+  it('settle -> explore on new_intent', () => {
+    const card = makeTaskCard({ intent: 'old task' });
+    const result = checkTransition('settle', 'task', card, 'new_intent');
+    expect(result.newPhase).toBe('explore');
+    expect(result.reason).toBe('new task after settlement');
+  });
+
+  it('focus -> explore on new_intent (rollback)', () => {
+    const card = makeTaskCard({ intent: 'test' });
+    const result = checkTransition('focus', 'task', card, 'new_intent');
+    expect(result.newPhase).toBe('explore');
+    expect(result.reason).not.toBeNull();
   });
 });

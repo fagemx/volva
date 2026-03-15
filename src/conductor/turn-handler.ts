@@ -4,9 +4,10 @@ import { parseIntent } from '../llm/intent-parser';
 import { generateReply } from '../llm/response-gen';
 import { checkTransition, type Phase } from './state-machine';
 import { pickStrategy } from './rhythm';
-import type { WorldCard } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, AnyCard, CardType } from '../schemas/card';
 import type { Intent } from '../schemas/intent';
 import type { Strategy } from '../llm/prompts';
+import type { ConversationMode } from '../schemas/conversation';
 
 export interface TurnResult {
   reply: string;
@@ -16,6 +17,8 @@ export interface TurnResult {
   strategy: Strategy;
   cardVersion: number;
 }
+
+// ─── Empty Card Factories ───
 
 export function createEmptyWorldCard(): WorldCard {
   return {
@@ -29,6 +32,53 @@ export function createEmptyWorldCard(): WorldCard {
     version: 1,
   };
 }
+
+export function createEmptyWorkflowCard(): WorkflowCard {
+  return {
+    name: null,
+    purpose: null,
+    steps: [],
+    confirmed: { triggers: [], exit_conditions: [], failure_handling: [] },
+    pending: [],
+    version: 1,
+  };
+}
+
+export function createEmptyTaskCard(): TaskCard {
+  return {
+    intent: '',
+    inputs: {},
+    constraints: [],
+    success_condition: null,
+    version: 1,
+  };
+}
+
+// ─── Mode / CardType Mapping ───
+
+export function modeToCardType(mode: ConversationMode): CardType {
+  switch (mode) {
+    case 'world_design':
+      return 'world';
+    case 'workflow_design':
+      return 'workflow';
+    case 'task':
+      return 'task';
+  }
+}
+
+export function createEmptyCard(mode: ConversationMode): AnyCard {
+  switch (mode) {
+    case 'world_design':
+      return createEmptyWorldCard();
+    case 'workflow_design':
+      return createEmptyWorkflowCard();
+    case 'task':
+      return createEmptyTaskCard();
+  }
+}
+
+// ─── Intent Apply Functions ───
 
 export function applyIntentToCard(card: WorldCard, intent: Intent): WorldCard {
   const updated = structuredClone(card);
@@ -73,22 +123,124 @@ export function applyIntentToCard(card: WorldCard, intent: Intent): WorldCard {
   return updated;
 }
 
+export function applyIntentToWorkflowCard(card: WorkflowCard, intent: Intent): WorkflowCard {
+  const updated = structuredClone(card);
+
+  switch (intent.type) {
+    case 'new_intent':
+      if (intent.summary) {
+        updated.name = intent.summary;
+        updated.purpose = intent.summary;
+      }
+      break;
+    case 'add_info':
+      if (intent.entities) {
+        for (const [, value] of Object.entries(intent.entities)) {
+          updated.steps.push({
+            order: updated.steps.length,
+            description: value,
+            skill: null,
+            conditions: null,
+          });
+        }
+      }
+      break;
+    case 'set_boundary':
+      if (intent.enforcement === 'hard') {
+        updated.confirmed.triggers.push(intent.summary);
+      } else {
+        updated.confirmed.exit_conditions.push(intent.summary);
+      }
+      break;
+    case 'add_constraint':
+      updated.confirmed.failure_handling.push(intent.summary);
+      break;
+    case 'confirm':
+    case 'settle_signal':
+    case 'modify':
+    case 'question':
+    case 'off_topic':
+    case 'style_preference':
+      break;
+  }
+
+  return updated;
+}
+
+export function applyIntentToTaskCard(card: TaskCard, intent: Intent): TaskCard {
+  const updated = structuredClone(card);
+
+  switch (intent.type) {
+    case 'new_intent':
+      if (intent.summary) updated.intent = intent.summary;
+      break;
+    case 'add_info':
+      if (intent.entities) {
+        for (const [key, value] of Object.entries(intent.entities)) {
+          updated.inputs[key] = value;
+        }
+      }
+      break;
+    case 'set_boundary':
+    case 'add_constraint':
+      updated.constraints.push(intent.summary);
+      break;
+    case 'confirm':
+    case 'settle_signal':
+    case 'modify':
+    case 'question':
+    case 'off_topic':
+    case 'style_preference':
+      break;
+  }
+
+  return updated;
+}
+
+export function applyIntent(cardType: CardType, card: AnyCard, intent: Intent): AnyCard {
+  switch (cardType) {
+    case 'world':
+      return applyIntentToCard(card as WorldCard, intent);
+    case 'workflow':
+      return applyIntentToWorkflowCard(card as WorkflowCard, intent);
+    case 'task':
+      return applyIntentToTaskCard(card as TaskCard, intent);
+  }
+}
+
+// ─── hasPending Helper ───
+
+function cardHasPending(cardType: CardType, card: AnyCard): boolean {
+  switch (cardType) {
+    case 'world':
+      return (card as WorldCard).pending.length > 0;
+    case 'workflow':
+      return (card as WorkflowCard).pending.length > 0;
+    case 'task':
+      return false;
+  }
+}
+
+// ─── handleTurn ───
+
 export async function handleTurn(
   llm: LLMClient,
   cardManager: CardManager,
   conversationId: string,
   userMessage: string,
   currentPhase: Phase,
+  mode: ConversationMode = 'world_design',
 ): Promise<TurnResult> {
+  const cardType = modeToCardType(mode);
   const currentCard = cardManager.getLatest(conversationId);
-  const cardContent = currentCard ? (currentCard.content as WorldCard) : createEmptyWorldCard();
+  const cardContent = currentCard ? currentCard.content : createEmptyCard(mode);
   const cardSnapshot = JSON.stringify(cardContent, null, 2);
 
   // LLM #1: parse intent
   const intent = await parseIntent(llm, userMessage, cardSnapshot);
 
   // Update card content based on intent
-  const updatedContent = applyIntentToCard(cardContent, intent);
+  const updatedContent = applyIntent(cardType, cardContent, intent);
 
   // Persist card
   let cardVersion: number;
@@ -96,19 +248,16 @@ export async function handleTurn(
     const { card } = cardManager.update(currentCard.id, updatedContent);
     cardVersion = card.version;
   } else {
-    const card = cardManager.create(conversationId, 'world', updatedContent);
+    const card = cardManager.create(conversationId, cardType, updatedContent);
     cardVersion = card.version;
   }
 
   // Check state transition
-  const transition = checkTransition(currentPhase, updatedContent, intent.type);
+  const transition = checkTransition(currentPhase, cardType, updatedContent, intent.type);
 
   // Pick reply strategy
-  const strategy = pickStrategy(
-    transition.newPhase,
-    intent.type,
-    updatedContent.pending.length > 0,
-  );
+  const hasPending = cardHasPending(cardType, updatedContent);
+  const strategy = pickStrategy(transition.newPhase, intent.type, hasPending, mode);
 
   // LLM #2: generate reply
   const reply = await generateReply(llm, strategy, JSON.stringify(updatedContent, null, 2), userMessage);
