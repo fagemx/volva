@@ -31,7 +31,8 @@ export function initSchema(db: Database): void {
     type TEXT NOT NULL CHECK(type IN ('world','workflow','task')),
     version INTEGER NOT NULL DEFAULT 1,
     content TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
 
   db.run(`CREATE TABLE IF NOT EXISTS settlements (

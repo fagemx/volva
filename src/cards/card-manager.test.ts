@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import type { Database } from 'bun:sqlite';
 import { CardManager, computeDiff } from './card-manager';
+import { createDb, initSchema } from '../db';
 import type { WorldCard } from '../schemas/card';
 
 const minimalWorldCard: WorldCard = {
@@ -38,15 +40,21 @@ const fullWorldCard: WorldCard = {
   version: 1,
 };
 
+let db: Database;
+let mgr: CardManager;
+
+beforeEach(() => {
+  db = createDb(':memory:');
+  initSchema(db);
+  // Cards table has FK to conversations — insert a test conversation
+  db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'world_design', 'explore')");
+  db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv2', 'world_design', 'explore')");
+  mgr = new CardManager(db);
+});
+
 // ─── Create Tests ───
 
 describe('CardManager.create', () => {
-  let mgr: CardManager;
-
-  beforeEach(() => {
-    mgr = new CardManager();
-  });
-
   it('creates a WorldCard with version=1', () => {
     const card = mgr.create('conv1', 'world', minimalWorldCard);
     expect(card.version).toBe(1);
@@ -78,12 +86,6 @@ describe('CardManager.create', () => {
 // ─── Update Tests ───
 
 describe('CardManager.update', () => {
-  let mgr: CardManager;
-
-  beforeEach(() => {
-    mgr = new CardManager();
-  });
-
   it('increments version on update', () => {
     const card = mgr.create('conv1', 'world', minimalWorldCard);
     const { card: updated } = mgr.update(card.id, {
@@ -172,13 +174,49 @@ describe('computeDiff', () => {
 
 describe('CardManager edge cases', () => {
   it('getLatest returns null for unknown conversation', () => {
-    const mgr = new CardManager();
     expect(mgr.getLatest('unknown')).toBeNull();
   });
 
   it('diff method works without persisting', () => {
-    const mgr = new CardManager();
     const diff = mgr.diff(minimalWorldCard, fullWorldCard);
     expect(diff.changed).toContain('goal');
+  });
+});
+
+// ─── DB Round-Trip Tests ───
+
+describe('CardManager DB persistence', () => {
+  it('persists cards to DB (round-trip)', () => {
+    const card = mgr.create('conv1', 'world', minimalWorldCard);
+
+    const row = db.query('SELECT * FROM cards WHERE id = ?').get(card.id) as Record<string, unknown>;
+    expect(row).not.toBeNull();
+    expect(row.conversation_id).toBe('conv1');
+    expect(row.version).toBe(1);
+
+    const content = JSON.parse(row.content as string) as Record<string, unknown>;
+    expect(content.version).toBe(1);
+  });
+
+  it('stores version history in DB', () => {
+    const card = mgr.create('conv1', 'world', minimalWorldCard);
+    mgr.update(card.id, { ...minimalWorldCard, goal: 'v2' });
+
+    const rows = db.query('SELECT * FROM cards WHERE conversation_id = ? ORDER BY version')
+      .all('conv1') as Record<string, unknown>[];
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0].version).toBe(1);
+    expect(rows[1].version).toBe(2);
+  });
+
+  it('getLatest returns the highest version', () => {
+    const card = mgr.create('conv1', 'world', minimalWorldCard);
+    mgr.update(card.id, { ...minimalWorldCard, goal: 'v2' });
+
+    const latest = mgr.getLatest('conv1');
+    expect(latest).not.toBeNull();
+    expect(latest!.version).toBe(2);
+    expect((latest!.content as WorldCard).goal).toBe('v2');
   });
 });

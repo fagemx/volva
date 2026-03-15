@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { applyIntentToCard, createEmptyWorldCard, handleTurn } from './turn-handler';
 import { CardManager } from '../cards/card-manager';
+import { createDb, initSchema } from '../db';
 import type { LLMClient } from '../llm/client';
 
 // ─── applyIntentToCard Tests ───
@@ -100,7 +101,10 @@ describe('handleTurn', () => {
     });
     mockGenerateReply.mockResolvedValueOnce('好的，你想做什麼樣的客服呢？');
 
-    const mgr = new CardManager();
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'world_design', 'explore')");
+    const mgr = new CardManager(db);
     const result = await handleTurn(mockLlm, mgr, 'conv1', '我想做客服', 'explore');
 
     expect(result.phase).toBe('explore');
@@ -115,7 +119,10 @@ describe('handleTurn', () => {
     });
     mockGenerateReply.mockResolvedValueOnce('了解');
 
-    const mgr = new CardManager();
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'world_design', 'explore')");
+    const mgr = new CardManager(db);
     await handleTurn(mockLlm, mgr, 'conv1', 'test', 'explore');
 
     // generateStructured (intent) + generateText (reply) = 2 calls
