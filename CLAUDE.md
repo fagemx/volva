@@ -1,6 +1,8 @@
 # CLAUDE.md
 
 > Volva 開發規範。所有 AI agent 和開發者必須遵守。
+>
+> 環境設定、專案定位、行為準則見 `AGENTS.md`。本文件專注於程式碼規範和 CONTRACT 規則。
 
 ## Tech Stack
 
@@ -99,6 +101,7 @@ async generateStructured<T extends z.ZodType>(options: LLMStructuredOptions<T>) 
 
 ```bash
 bun run build     # tsc --noEmit，零錯誤
+bun run lint      # eslint src/，零錯誤
 bun test          # 所有測試通過
 ```
 
@@ -137,7 +140,7 @@ else console.warn('[parseIntent] fallback:', result.error);
 // ❌ 3 次 LLM 呼叫
 async function handleTurn(/* ... */) {
   const intent = await parseIntent(llm, userMessage, cardSnapshot);   // LLM #1
-  const analysis = await analyzeContext(llm, intent);                 // LLM #3 -- 違規！
+  const analysis = await analyzeContext(llm, intent);                 // ← VIOLATION: 第 3 次 LLM 呼叫
   const reply = await generateReply(llm, strategy, cardStr, msg);     // LLM #2
 }
 
