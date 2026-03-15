@@ -25,6 +25,7 @@ async function runCli() {
   let phase: Phase = 'explore';
   let mode: ConversationMode = 'world_design';
   let turn = 0;
+  let nomodStreak = 0;
   let awaitingSettleConfirm = false;
   let pendingSettlementId: string | null = null;
 
@@ -105,8 +106,10 @@ async function runCli() {
       input,
       phase,
       mode,
+      nomodStreak,
     );
     phase = result.phase;
+    nomodStreak = result.nomodStreak;
 
     if (result.detectedMode) {
       mode = result.detectedMode;
@@ -121,12 +124,10 @@ async function runCli() {
       [crypto.randomUUID(), conversationId, 'assistant', result.reply, turn],
     );
 
-    if (result.phaseChanged) {
-      db.run(
-        "UPDATE conversations SET phase = ?, updated_at = datetime('now') WHERE id = ?",
-        [result.phase, conversationId],
-      );
-    }
+    db.run(
+      "UPDATE conversations SET phase = ?, nomod_streak = ?, updated_at = datetime('now') WHERE id = ?",
+      [result.phase, result.nomodStreak, conversationId],
+    );
 
     console.log(`\n[${result.strategy}] ${result.reply}\n`);
 

@@ -4,7 +4,7 @@ import { parseIntent } from '../llm/intent-parser';
 import { generateReply } from '../llm/response-gen';
 import { checkTransition, type Phase } from './state-machine';
 import { pickStrategy } from './rhythm';
-import type { WorldCard, WorkflowCard, TaskCard, AnyCard, CardType } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, AnyCard, CardType, CardDiff } from '../schemas/card';
 import type { Intent } from '../schemas/intent';
 import type { Strategy } from '../llm/prompts';
 import type { ConversationMode } from '../schemas/conversation';
@@ -17,6 +17,13 @@ export interface TurnResult {
   strategy: Strategy;
   cardVersion: number;
   detectedMode?: ConversationMode;
+  nomodStreak: number;
+}
+
+export function isDiffEmpty(diff: CardDiff): boolean {
+  return diff.added.length === 0
+    && diff.removed.length === 0
+    && diff.changed.filter(k => k !== 'version').length === 0;
 }
 
 // ─── Empty Card Factories ───
@@ -257,6 +264,7 @@ export async function handleTurn(
   userMessage: string,
   currentPhase: Phase,
   mode: ConversationMode = 'world_design',
+  nomodStreak = 0,
 ): Promise<TurnResult> {
   const currentCard = cardManager.getLatest(conversationId);
   const isFirstTurn = !currentCard;
@@ -280,18 +288,21 @@ export async function handleTurn(
   // Update card content based on intent
   const updatedContent = applyIntent(cardType, effectiveCardContent, intent);
 
-  // Persist card
+  // Persist card and compute diff-based nomod streak
   let cardVersion: number;
+  let newNomodStreak: number;
   if (currentCard) {
-    const { card } = cardManager.update(currentCard.id, updatedContent);
+    const { card, diff } = cardManager.update(currentCard.id, updatedContent);
     cardVersion = card.version;
+    newNomodStreak = isDiffEmpty(diff) ? nomodStreak + 1 : 0;
   } else {
     const card = cardManager.create(conversationId, cardType, updatedContent);
     cardVersion = card.version;
+    newNomodStreak = 0;
   }
 
   // Check state transition
-  const transition = checkTransition(currentPhase, cardType, updatedContent, intent.type);
+  const transition = checkTransition(currentPhase, cardType, updatedContent, intent.type, newNomodStreak);
 
   // Pick reply strategy
   const hasPending = cardHasPending(cardType, updatedContent);
@@ -308,5 +319,6 @@ export async function handleTurn(
     strategy,
     cardVersion,
     ...(detectedMode !== undefined && { detectedMode }),
+    nomodStreak: newNomodStreak,
   };
 }

@@ -12,6 +12,7 @@ export function initSchema(db: Database): void {
     mode TEXT NOT NULL CHECK(mode IN ('world_design','workflow_design','task')),
     phase TEXT NOT NULL DEFAULT 'explore' CHECK(phase IN ('explore','focus','settle')),
     village_id TEXT,
+    nomod_streak INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);

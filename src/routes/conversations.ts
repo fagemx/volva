@@ -83,7 +83,7 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
     }
 
     const conv = deps.db
-      .query('SELECT phase, mode FROM conversations WHERE id = ?')
+      .query('SELECT phase, mode, nomod_streak FROM conversations WHERE id = ?')
       .get(conversationId) as Record<string, unknown> | null;
 
     if (!conv) {
@@ -92,6 +92,7 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
 
     const phase = conv.phase as string;
     const mode = conv.mode as string;
+    const nomodStreak = conv.nomod_streak as number;
 
     // Count existing messages to determine turn number
     const turnRow = deps.db
@@ -116,6 +117,7 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
         content,
         phase as 'explore' | 'focus' | 'settle',
         mode as 'world_design' | 'workflow_design' | 'task',
+        nomodStreak,
       );
 
       // Persist assistant reply
@@ -131,12 +133,10 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
         );
       }
 
-      if (result.phase !== phase) {
-        deps.db.run(
-          "UPDATE conversations SET phase = ?, updated_at = datetime('now') WHERE id = ?",
-          [result.phase, conversationId],
-        );
-      }
+      deps.db.run(
+        "UPDATE conversations SET phase = ?, nomod_streak = ?, updated_at = datetime('now') WHERE id = ?",
+        [result.phase, result.nomodStreak, conversationId],
+      );
 
       return ok(c, {
         reply: result.reply,
