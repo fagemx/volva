@@ -83,6 +83,7 @@ async function runCli() {
       conversationId,
       input,
       phase,
+      'world_design',
     );
     phase = result.phase;
 

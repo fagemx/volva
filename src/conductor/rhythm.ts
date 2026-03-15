@@ -1,10 +1,17 @@
 import type { Phase } from './state-machine';
 import type { IntentType } from '../schemas/intent';
 import type { Strategy } from '../llm/prompts';
+import type { ConversationMode } from '../schemas/conversation';
 
-export function pickStrategy(phase: Phase, intentType: IntentType, hasPending: boolean): Strategy {
+export function pickStrategy(
+  phase: Phase,
+  intentType: IntentType,
+  hasPending: boolean,
+  mode?: ConversationMode,
+): Strategy {
   switch (phase) {
     case 'explore':
+      if (mode === 'task' && intentType === 'confirm') return 'settle';
       if (intentType === 'new_intent') return 'mirror';
       if (intentType === 'set_boundary') return 'mirror';
       return 'probe';
