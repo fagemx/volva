@@ -129,6 +129,61 @@ describe('WorldCard: FOCUS -> SETTLE transitions', () => {
   });
 });
 
+describe('WorldCard: FOCUS -> SETTLE via consecutive no-mod', () => {
+  it('focus -> settle when consecutiveNoModTurns >= 2', () => {
+    const card = makeWorldCard({ pendingCount: 1 });
+    const result = checkTransition('focus', 'world', card, 'add_info', 2);
+    expect(result.newPhase).toBe('settle');
+    expect(result.reason).toBe('consecutive 2 turns with no modification');
+  });
+
+  it('focus stays when consecutiveNoModTurns < 2', () => {
+    const card = makeWorldCard({ pendingCount: 1 });
+    const result = checkTransition('focus', 'world', card, 'add_info', 1);
+    expect(result.newPhase).toBe('focus');
+    expect(result.reason).toBeNull();
+  });
+
+  it('explore ignores consecutiveNoModTurns', () => {
+    const card = makeWorldCard({});
+    const result = checkTransition('explore', 'world', card, 'add_info', 5);
+    expect(result.newPhase).toBe('explore');
+    expect(result.reason).toBeNull();
+  });
+});
+
+describe('WorkflowCard: FOCUS -> SETTLE via consecutive no-mod', () => {
+  it('focus -> settle when consecutiveNoModTurns >= 2', () => {
+    const card = makeWorkflowCard({ pendingCount: 1 });
+    const result = checkTransition('focus', 'workflow', card, 'add_info', 2);
+    expect(result.newPhase).toBe('settle');
+    expect(result.reason).toBe('consecutive 2 turns with no modification');
+  });
+
+  it('focus stays when consecutiveNoModTurns < 2', () => {
+    const card = makeWorkflowCard({ pendingCount: 1 });
+    const result = checkTransition('focus', 'workflow', card, 'add_info', 1);
+    expect(result.newPhase).toBe('focus');
+    expect(result.reason).toBeNull();
+  });
+});
+
+describe('TaskCard: FOCUS -> SETTLE via consecutive no-mod', () => {
+  it('focus -> settle when consecutiveNoModTurns >= 2', () => {
+    const card = makeTaskCard({ intent: 'test' });
+    const result = checkTransition('focus', 'task', card, 'add_info', 2);
+    expect(result.newPhase).toBe('settle');
+    expect(result.reason).toBe('consecutive 2 turns with no modification');
+  });
+
+  it('focus stays when consecutiveNoModTurns < 2', () => {
+    const card = makeTaskCard({ intent: 'test' });
+    const result = checkTransition('focus', 'task', card, 'add_info', 1);
+    expect(result.newPhase).toBe('focus');
+    expect(result.reason).toBeNull();
+  });
+});
+
 describe('WorldCard: Rollback transitions', () => {
   it('focus -> explore on new_intent (rollback)', () => {
     const card = makeWorldCard({});

@@ -7,6 +7,7 @@ import {
   createEmptyWorkflowCard,
   createEmptyTaskCard,
   handleTurn,
+  isDiffEmpty,
 } from './turn-handler';
 import { CardManager } from '../cards/card-manager';
 import { createDb, initSchema } from '../db';
@@ -382,5 +383,127 @@ describe('handleTurn', () => {
     const card = mgr.getLatest('conv1');
     expect(card).not.toBeNull();
     expect(card!.type).toBe('world');
+  });
+});
+
+// ─── isDiffEmpty Tests ───
+
+describe('isDiffEmpty', () => {
+  it('returns true when diff has no changes except version', () => {
+    expect(isDiffEmpty({ added: [], removed: [], changed: ['version'] })).toBe(true);
+  });
+
+  it('returns true when diff is completely empty', () => {
+    expect(isDiffEmpty({ added: [], removed: [], changed: [] })).toBe(true);
+  });
+
+  it('returns false when diff has added fields', () => {
+    expect(isDiffEmpty({ added: ['goal'], removed: [], changed: [] })).toBe(false);
+  });
+
+  it('returns false when diff has removed fields', () => {
+    expect(isDiffEmpty({ added: [], removed: ['goal'], changed: [] })).toBe(false);
+  });
+
+  it('returns false when diff has changed fields besides version', () => {
+    expect(isDiffEmpty({ added: [], removed: [], changed: ['version', 'goal'] })).toBe(false);
+  });
+});
+
+// ─── nomodStreak tracking in handleTurn ───
+
+describe('handleTurn nomodStreak', () => {
+  const mockParseIntent = vi.fn();
+  const mockGenerateReply = vi.fn();
+
+  const mockLlm = {
+    generateStructured: mockParseIntent,
+    generateText: mockGenerateReply,
+  } as unknown as LLMClient;
+
+  beforeEach(() => {
+    mockParseIntent.mockReset();
+    mockGenerateReply.mockReset();
+  });
+
+  it('increments nomodStreak when diff is empty (confirm intent)', async () => {
+    // First turn to create card
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: 'test goal' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('OK');
+
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'world_design', 'focus')");
+    const mgr = new CardManager(db);
+
+    // Turn 1: create card with content
+    await handleTurn(mockLlm, mgr, 'conv1', 'test goal', 'focus', 'world_design', 0);
+
+    // Turn 2: confirm (no content change) -> nomodStreak should be 1
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'confirm', summary: 'OK' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('confirmed');
+
+    const result2 = await handleTurn(mockLlm, mgr, 'conv1', 'OK', 'focus', 'world_design', 0);
+    expect(result2.nomodStreak).toBe(1);
+  });
+
+  it('resets nomodStreak to 0 when diff has changes', async () => {
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: 'initial goal' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('OK');
+
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'world_design', 'focus')");
+    const mgr = new CardManager(db);
+
+    // Turn 1: create card
+    await handleTurn(mockLlm, mgr, 'conv1', 'initial goal', 'focus', 'world_design', 0);
+
+    // Turn 2: add_info (content changes) with nomodStreak=3 -> should reset to 0
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'add_info', summary: 'more', entities: { f1: 'feature1' } },
+    });
+    mockGenerateReply.mockResolvedValueOnce('got it');
+
+    const result2 = await handleTurn(mockLlm, mgr, 'conv1', 'add feature', 'focus', 'world_design', 3);
+    expect(result2.nomodStreak).toBe(0);
+  });
+
+  it('transitions to settle after 2 consecutive no-mod turns', async () => {
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: 'goal' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('OK');
+
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'world_design', 'focus')");
+    const mgr = new CardManager(db);
+
+    // Turn 1: create card
+    await handleTurn(mockLlm, mgr, 'conv1', 'goal', 'focus', 'world_design', 0);
+
+    // Turn 2: confirm with nomodStreak=1 -> diff empty -> streak becomes 2 -> settle
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'question', summary: 'hmm' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('settled');
+
+    const result = await handleTurn(mockLlm, mgr, 'conv1', 'hmm', 'focus', 'world_design', 1);
+    expect(result.nomodStreak).toBe(2);
+    expect(result.phase).toBe('settle');
+    expect(result.phaseChanged).toBe(true);
   });
 });

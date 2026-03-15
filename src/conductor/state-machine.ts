@@ -16,6 +16,7 @@ function checkWorldTransition(
   currentPhase: Phase,
   card: WorldCard,
   intentType: IntentType,
+  consecutiveNoModTurns: number,
 ): TransitionResult {
   // EXPLORE -> FOCUS
   if (currentPhase === 'explore') {
@@ -34,6 +35,9 @@ function checkWorldTransition(
     }
     if (intentType === 'settle_signal') {
       return { newPhase: 'settle', reason: 'user explicit settle signal' };
+    }
+    if (consecutiveNoModTurns >= 2) {
+      return { newPhase: 'settle', reason: 'consecutive 2 turns with no modification' };
     }
   }
 
@@ -60,6 +64,7 @@ function checkWorkflowTransition(
   currentPhase: Phase,
   card: WorkflowCard,
   intentType: IntentType,
+  consecutiveNoModTurns: number,
 ): TransitionResult {
   // EXPLORE -> FOCUS
   if (currentPhase === 'explore') {
@@ -75,6 +80,9 @@ function checkWorkflowTransition(
     }
     if (intentType === 'settle_signal') {
       return { newPhase: 'settle', reason: 'user explicit settle signal' };
+    }
+    if (consecutiveNoModTurns >= 2) {
+      return { newPhase: 'settle', reason: 'consecutive 2 turns with no modification' };
     }
   }
 
@@ -101,6 +109,7 @@ function checkTaskTransition(
   currentPhase: Phase,
   card: TaskCard,
   intentType: IntentType,
+  consecutiveNoModTurns: number,
 ): TransitionResult {
   // EXPLORE -> SETTLE (fast-path)
   if (currentPhase === 'explore') {
@@ -117,6 +126,9 @@ function checkTaskTransition(
   if (currentPhase === 'focus') {
     if (intentType === 'confirm' || intentType === 'settle_signal') {
       return { newPhase: 'settle', reason: 'user confirmed task' };
+    }
+    if (consecutiveNoModTurns >= 2) {
+      return { newPhase: 'settle', reason: 'consecutive 2 turns with no modification' };
     }
   }
 
@@ -144,13 +156,14 @@ export function checkTransition(
   cardType: CardType,
   card: AnyCard,
   intentType: IntentType,
+  consecutiveNoModTurns = 0,
 ): TransitionResult {
   switch (cardType) {
     case 'world':
-      return checkWorldTransition(currentPhase, card as WorldCard, intentType);
+      return checkWorldTransition(currentPhase, card as WorldCard, intentType, consecutiveNoModTurns);
     case 'workflow':
-      return checkWorkflowTransition(currentPhase, card as WorkflowCard, intentType);
+      return checkWorkflowTransition(currentPhase, card as WorkflowCard, intentType, consecutiveNoModTurns);
     case 'task':
-      return checkTaskTransition(currentPhase, card as TaskCard, intentType);
+      return checkTaskTransition(currentPhase, card as TaskCard, intentType, consecutiveNoModTurns);
   }
 }
