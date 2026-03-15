@@ -21,7 +21,8 @@
       "Bash(pwd)",
       "Bash(netstat *)",
       "Bash(taskkill *)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(bun run:*)"
     ]
   }
 }

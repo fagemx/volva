@@ -48,21 +48,27 @@ Run every PR through these four checks, in order:
 
 - For every external function/API referenced: verify it exists in the codebase
 - For every assumption about behavior: verify with code evidence
-- Check that board.json schema changes are consistent with server.js handling
 
-**Karvi-specific checks**:
-- Does the code respect zero-dependency constraint? (no `require()` of external modules)
-- Are board.json writes atomic?
-- Does Windows spawn use `cmd.exe /d /s /c` pattern?
-- Are SSE events properly formatted?
+**Volva-specific checks** (see CLAUDE.md for full rules):
+- **TYPE-01**: No `any`, `as any`, `@ts-ignore`. Use Zod for runtime, TypeScript for compile-time.
+- **ARCH-01**: No direct Thyra DB access. Only via `thyra-client/` HTTP wrapper.
+- **ARCH-02**: Layer dependency — lower layers must not import upper layers.
+- **LLM-01**: Every `generateStructured()` must use Zod schema + `.safeParse()`.
+- **LLM-02**: LLM calls wrapped in try/catch with graceful fallback.
+- **COND-01**: Phase transitions need explicit boolean conditions, no implicit transitions.
+- **COND-02**: Max 2 LLM calls per `handleTurn()` (parseIntent + generateReply).
+- **CARD-01**: Card updates must increment `version`.
+- **SETTLE-01**: Settlement requires user confirmation, no auto-execute.
+- **API-01**: All routes return `{ ok: true, data }` or `{ ok: false, error: { code, message } }`.
 
 #### Check 3: Testing
 
 > Are there tests? Do they cover the change?
 
 - Behavior change without test → flag
-- New API endpoint without smoke test coverage → flag
+- New API endpoint without test coverage → flag
 - Missing edge cases on the critical path → flag
+- LLM calls must be mocked (`vi.mock`), DB tests use real `:memory:` SQLite (TEST-01)
 
 #### Check 4: YAGNI
 
@@ -71,7 +77,7 @@ Run every PR through these four checks, in order:
 - Code added "just in case" → flag
 - Abstractions for one use case → flag
 - Features not needed yet → flag
-- External dependency added → flag (violates zero-dep constraint)
+- Defensive programming on typed params (TypeScript already guarantees) → flag
 
 ### Step 3: Generate PR Comment
 
