@@ -1,8 +1,6 @@
 import type { LLMClient } from './client';
 import { buildReplyPrompt, type Strategy } from './prompts';
 
-export type { Strategy } from './prompts';
-
 export async function generateReply(
   llm: LLMClient,
   strategy: Strategy,
