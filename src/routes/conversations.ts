@@ -42,7 +42,7 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
     }
 
     const conv = deps.db
-      .query('SELECT phase FROM conversations WHERE id = ?')
+      .query('SELECT phase, mode FROM conversations WHERE id = ?')
       .get(conversationId) as Record<string, unknown> | null;
 
     if (!conv) {
@@ -50,6 +50,7 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
     }
 
     const phase = conv.phase as string;
+    const mode = conv.mode as string;
 
     // Count existing messages to determine turn number
     const turnRow = deps.db
@@ -73,6 +74,7 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
         conversationId,
         content,
         phase as 'explore' | 'focus' | 'settle',
+        mode as 'world_design' | 'workflow_design' | 'task',
       );
 
       // Persist assistant reply
@@ -80,6 +82,13 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
         'INSERT INTO messages (id, conversation_id, role, content, turn) VALUES (?, ?, ?, ?, ?)',
         [crypto.randomUUID(), conversationId, 'assistant', result.reply, turn],
       );
+
+      if (result.detectedMode) {
+        deps.db.run(
+          "UPDATE conversations SET mode = ?, updated_at = datetime('now') WHERE id = ?",
+          [result.detectedMode, conversationId],
+        );
+      }
 
       if (result.phase !== phase) {
         deps.db.run(

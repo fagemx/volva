@@ -298,4 +298,89 @@ describe('handleTurn', () => {
     expect(card).not.toBeNull();
     expect(card!.type).toBe('task');
   });
+
+  it('auto-detects workflow_design mode on first turn', async () => {
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: '每週自動發文', detected_mode: 'workflow_design' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('好的，讓我們設計流程');
+
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'world_design', 'explore')");
+    const mgr = new CardManager(db);
+    const result = await handleTurn(mockLlm, mgr, 'conv1', '設定每週自動發文流程', 'explore', 'world_design');
+
+    expect(result.detectedMode).toBe('workflow_design');
+
+    const card = mgr.getLatest('conv1');
+    expect(card).not.toBeNull();
+    expect(card!.type).toBe('workflow');
+  });
+
+  it('auto-detects task mode on first turn', async () => {
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: '查上週資料', detected_mode: 'task' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('好的，讓我幫你查');
+
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'world_design', 'explore')");
+    const mgr = new CardManager(db);
+    const result = await handleTurn(mockLlm, mgr, 'conv1', '幫我查上週的資料', 'explore', 'world_design');
+
+    expect(result.detectedMode).toBe('task');
+
+    const card = mgr.getLatest('conv1');
+    expect(card).not.toBeNull();
+    expect(card!.type).toBe('task');
+  });
+
+  it('does not return detectedMode on second turn', async () => {
+    // First turn
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: '做客服' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('好的');
+
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'world_design', 'explore')");
+    const mgr = new CardManager(db);
+    await handleTurn(mockLlm, mgr, 'conv1', '做客服', 'explore');
+
+    // Second turn - even if LLM returns detected_mode, it should be ignored
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'add_info', summary: '加功能', detected_mode: 'task' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('了解');
+
+    const result = await handleTurn(mockLlm, mgr, 'conv1', '加功能', 'explore');
+    expect(result.detectedMode).toBeUndefined();
+  });
+
+  it('defaults to world_design when no detected_mode on first turn', async () => {
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: '做客服' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('好的');
+
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'world_design', 'explore')");
+    const mgr = new CardManager(db);
+    const result = await handleTurn(mockLlm, mgr, 'conv1', '做客服', 'explore');
+
+    expect(result.detectedMode).toBeUndefined();
+
+    const card = mgr.getLatest('conv1');
+    expect(card).not.toBeNull();
+    expect(card!.type).toBe('world');
+  });
 });

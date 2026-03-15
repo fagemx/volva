@@ -22,7 +22,7 @@ export async function parseIntent(
     ],
     schema: IntentSchema,
     schemaDescription:
-      'Intent object with type (one of 10 enum values), summary (string), optional entities (record), optional enforcement (hard|soft), optional signals (string array)',
+      'Intent object with type (one of 10 enum values), summary (string), optional entities (record), optional enforcement (hard|soft), optional signals (string array), optional detected_mode (world_design|workflow_design|task, first turn only)',
   });
 
   if (result.ok) return result.data;
