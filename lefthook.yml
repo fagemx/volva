@@ -8,6 +8,11 @@ pre-commit:
     test:
       run: bun run test
 
+pre-push:
+  commands:
+    knip:
+      run: bun run knip
+
 commit-msg:
   commands:
     conventional-commit:
