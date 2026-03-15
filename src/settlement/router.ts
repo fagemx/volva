@@ -21,9 +21,6 @@ export function classifySettlement(
     return null;
   }
 
-  if (cardType === 'task') {
-    return 'task';
-  }
-
-  return null;
+  // cardType === 'task'
+  return 'task';
 }

@@ -68,7 +68,7 @@ export class ThyraClient {
     const url = `${this.baseUrl}/api/health`;
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeout);
+      const timer = setTimeout(() => { controller.abort(); }, this.timeout);
       try {
         const response = await this.fetchFn(url, { signal: controller.signal });
         const json: unknown = await response.json();
@@ -104,6 +104,7 @@ export class ThyraClient {
       throw new ThyraValidationError(successParsed.error);
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- Zod validated, generic inference limitation
     return successParsed.data.data as z.infer<T>;
   }
 
@@ -121,7 +122,7 @@ export class ThyraClient {
       }
 
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeout);
+      const timer = setTimeout(() => { controller.abort(); }, this.timeout);
 
       try {
         const response = await this.fetchFn(url, {

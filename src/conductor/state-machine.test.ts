@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkTransition, type Phase, type IntentType } from './state-machine';
+import { checkTransition } from './state-machine';
 import type { WorldCard } from '../schemas/card';
 
 function makeCard(opts: {

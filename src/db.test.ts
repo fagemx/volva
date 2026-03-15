@@ -32,7 +32,7 @@ describe('DB Layer — initSchema', () => {
   });
 
   it('is idempotent (can call initSchema twice)', () => {
-    expect(() => initSchema(db)).not.toThrow();
+    expect(() => { initSchema(db); }).not.toThrow();
   });
 
   // ── conversations ──
