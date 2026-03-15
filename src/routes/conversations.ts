@@ -51,6 +51,21 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
 
     const phase = conv.phase as string;
 
+    // Count existing messages to determine turn number
+    const turnRow = deps.db
+      .query(
+        'SELECT COUNT(*) as count FROM messages WHERE conversation_id = ? AND role = ?',
+      )
+      .get(conversationId, 'user') as Record<string, unknown> | null;
+    const count = turnRow ? (turnRow.count as number) : 0;
+    const turn = count + 1;
+
+    // Persist user message
+    deps.db.run(
+      'INSERT INTO messages (id, conversation_id, role, content, turn) VALUES (?, ?, ?, ?, ?)',
+      [crypto.randomUUID(), conversationId, 'user', content, turn],
+    );
+
     try {
       const result = await handleTurn(
         deps.llm,
@@ -60,11 +75,17 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
         phase as 'explore' | 'focus' | 'settle',
       );
 
+      // Persist assistant reply
+      deps.db.run(
+        'INSERT INTO messages (id, conversation_id, role, content, turn) VALUES (?, ?, ?, ?, ?)',
+        [crypto.randomUUID(), conversationId, 'assistant', result.reply, turn],
+      );
+
       if (result.phase !== phase) {
-        deps.db.run('UPDATE conversations SET phase = ? WHERE id = ?', [
-          result.phase,
-          conversationId,
-        ]);
+        deps.db.run(
+          "UPDATE conversations SET phase = ?, updated_at = datetime('now') WHERE id = ?",
+          [result.phase, conversationId],
+        );
       }
 
       return ok(c, {

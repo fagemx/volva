@@ -51,12 +51,13 @@ function jsonPost(app: Hono, path: string, body: Record<string, unknown>) {
 
 describe('GP-1: Minimum Closed Loop', () => {
   let app: Hono;
+  let db: ReturnType<typeof createDb>;
   let llm: ReturnType<typeof createMockLlm>;
 
   beforeEach(() => {
     llm = createMockLlm();
     const thyra = createMockThyra();
-    ({ app } = createTestApp(llm, thyra));
+    ({ app, db } = createTestApp(llm, thyra));
   });
 
   it('creates a conversation with default mode', async () => {
@@ -123,6 +124,35 @@ describe('GP-1: Minimum Closed Loop', () => {
     expect(data.phase).toBe('explore');
     expect(data.strategy).toBeDefined();
     expect(data.cardVersion).toBeGreaterThanOrEqual(1);
+  });
+
+  it('persists user and assistant messages to DB', async () => {
+    (llm.generateStructured as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: '做客服' },
+    });
+    (llm.generateText as ReturnType<typeof vi.fn>).mockResolvedValueOnce('OK');
+
+    const createRes = await jsonPost(app, '/api/conversations', {});
+    const createJson = (await createRes.json()) as Record<string, unknown>;
+    const convData = createJson.data as Record<string, unknown>;
+    const id = convData.id as string;
+
+    await jsonPost(app, `/api/conversations/${id}/messages`, {
+      content: '做客服',
+    });
+
+    const messages = db
+      .query('SELECT role, content, turn FROM messages WHERE conversation_id = ? ORDER BY created_at')
+      .all(id) as Record<string, unknown>[];
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0].role).toBe('user');
+    expect(messages[0].content).toBe('做客服');
+    expect(messages[1].role).toBe('assistant');
+    expect(messages[1].content).toBe('OK');
+    expect(messages[0].turn).toBe(1);
+    expect(messages[1].turn).toBe(1);
   });
 
   it('returns 404 for message to nonexistent conversation', async () => {

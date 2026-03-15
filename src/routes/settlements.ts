@@ -49,10 +49,19 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
 
     if (target === 'village_pack') {
       const yaml = buildVillagePack(card.content as WorldCard);
+      const settlementId = crypto.randomUUID();
       try {
         const result = await deps.thyra.applyVillagePack(yaml);
+        deps.db.run(
+          'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status, thyra_response) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [settlementId, conversationId, card.id, target, yaml, 'applied', JSON.stringify(result)],
+        );
         return ok(c, { target, yaml, status: 'applied', thyra: result });
       } catch (err) {
+        deps.db.run(
+          'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
+          [settlementId, conversationId, card.id, target, yaml, 'failed'],
+        );
         return error(
           c,
           'UPSTREAM_ERROR',
