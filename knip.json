@@ -5,6 +5,7 @@
     "src/schemas/*.ts",
     "src/llm/client.ts",
     "src/cards/card-manager.ts",
+    "src/cards/village-loader.ts",
     "src/conductor/turn-handler.ts",
     "src/conductor/state-machine.ts",
     "src/settlement/router.ts",

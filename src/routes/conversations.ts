@@ -3,12 +3,15 @@ import type { Database } from 'bun:sqlite';
 import { ok, error } from './response';
 import type { LLMClient } from '../llm/client';
 import type { CardManager } from '../cards/card-manager';
+import type { ThyraClient } from '../thyra-client/client';
 import { handleTurn } from '../conductor/turn-handler';
+import { loadVillageState } from '../cards/village-loader';
 
 export interface ConversationDeps {
   db: Database;
   llm: LLMClient;
   cardManager: CardManager;
+  thyra?: ThyraClient;
 }
 
 export function conversationRoutes(deps: ConversationDeps): Hono {
@@ -18,17 +21,55 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
   app.post('/api/conversations', async (c) => {
     const body: Record<string, unknown> = await c.req.json();
     const mode = typeof body.mode === 'string' ? body.mode : 'world_design';
+    const villageId = typeof body.village_id === 'string' ? body.village_id : undefined;
 
     if (!['world_design', 'workflow_design', 'task'].includes(mode)) {
       return error(c, 'INVALID_INPUT', `Invalid mode: ${mode}`, 400);
     }
 
     const id = crypto.randomUUID();
-    deps.db.run(
-      "INSERT INTO conversations (id, mode, phase) VALUES (?, ?, 'explore')",
-      [id, mode],
-    );
-    return ok(c, { id, mode, phase: 'explore' }, 201);
+    let phase: 'explore' | 'focus' | 'settle' = 'explore';
+    let preloaded = false;
+
+    if (villageId && deps.thyra) {
+      try {
+        const [village, constitution, chiefs] = await Promise.all([
+          deps.thyra.getVillage(villageId),
+          deps.thyra.getActiveConstitution(villageId),
+          deps.thyra.getChiefs(villageId),
+        ]);
+
+        const worldCard = loadVillageState(village, constitution, chiefs);
+
+        // Determine starting phase based on loaded card content
+        if (worldCard.confirmed.hard_rules.length > 0 && worldCard.confirmed.must_have.length >= 3) {
+          phase = 'focus';
+        }
+
+        deps.db.run(
+          'INSERT INTO conversations (id, mode, phase, village_id) VALUES (?, ?, ?, ?)',
+          [id, mode, phase, villageId],
+        );
+
+        deps.cardManager.create(id, 'world', worldCard);
+        preloaded = true;
+      } catch (err) {
+        console.error('[conversations] Failed to load village:', err);
+        return error(
+          c,
+          'THYRA_UNAVAILABLE',
+          err instanceof Error ? err.message : 'Failed to load village from Thyra',
+          502,
+        );
+      }
+    } else {
+      deps.db.run(
+        "INSERT INTO conversations (id, mode, phase, village_id) VALUES (?, ?, ?, ?)",
+        [id, mode, phase, villageId ?? null],
+      );
+    }
+
+    return ok(c, { id, mode, phase, village_id: villageId ?? null, preloaded }, 201);
   });
 
   // POST /api/conversations/:id/messages

@@ -87,10 +87,30 @@ export const ConstitutionDataSchema = z.object({
 });
 export type ConstitutionData = z.infer<typeof ConstitutionDataSchema>;
 
+export const ActiveConstitutionDataSchema = z.object({
+  id: z.string(),
+  village_id: z.string(),
+  rules: z.array(z.object({
+    description: z.string(),
+    enforcement: z.enum(['hard', 'soft']),
+    scope: z.array(z.string()),
+  })),
+  allowed_permissions: z.array(z.string()).optional(),
+  budget_limits: z.object({
+    max_cost_per_action: z.number(),
+    max_cost_per_day: z.number(),
+    max_cost_per_loop: z.number(),
+  }).optional(),
+});
+export type ActiveConstitutionData = z.infer<typeof ActiveConstitutionDataSchema>;
+
 export const ChiefDataSchema = z.object({
   id: z.string(),
   village_id: z.string(),
   name: z.string(),
+  role: z.string().optional(),
+  personality: z.string().optional(),
+  permissions: z.array(z.string()).optional(),
 });
 export type ChiefData = z.infer<typeof ChiefDataSchema>;
 
