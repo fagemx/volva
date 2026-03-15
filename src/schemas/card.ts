@@ -81,3 +81,24 @@ export type TaskCard = z.infer<typeof TaskCardSchema>;
 // ─── Union type for downstream consumers ───
 
 export type AnyCard = WorldCard | WorkflowCard | TaskCard;
+
+// ─── Card Diff ───
+
+export const CardDiffSchema = z.object({
+  added: z.array(z.string()),
+  removed: z.array(z.string()),
+  changed: z.array(z.string()),
+});
+export type CardDiff = z.infer<typeof CardDiffSchema>;
+
+// ─── Card Envelope ───
+
+export interface CardEnvelope {
+  id: string;
+  conversationId: string;
+  type: CardType;
+  content: AnyCard;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
