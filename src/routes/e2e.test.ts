@@ -29,7 +29,7 @@ function createMockThyra() {
 function createTestApp(llm: LLMClient, thyra: ThyraClient) {
   const db = createDb(':memory:');
   initSchema(db);
-  const cardManager = new CardManager();
+  const cardManager = new CardManager(db);
 
   const app = new Hono();
   app.route('/', conversationRoutes({ db, llm, cardManager }));

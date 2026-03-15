@@ -12,7 +12,7 @@ async function runCli() {
   const db = createDb();
   initSchema(db);
   const llm = new LLMClient();
-  const cardManager = new CardManager();
+  const cardManager = new CardManager(db);
   const thyra = new ThyraClient();
 
   const conversationId = crypto.randomUUID();
