@@ -22,6 +22,7 @@ async function runCli() {
   );
 
   let phase: Phase = 'explore';
+  let turn = 0;
   let awaitingSettleConfirm = false;
   let pendingYaml: string | null = null;
 
@@ -34,22 +35,47 @@ async function runCli() {
 
     // Handle settlement confirmation
     if (awaitingSettleConfirm) {
+      turn += 1;
+      db.run(
+        'INSERT INTO messages (id, conversation_id, role, content, turn) VALUES (?, ?, ?, ?, ?)',
+        [crypto.randomUUID(), conversationId, 'user', input, turn],
+      );
+
+      let settleReply: string;
       if (input === 'y' || input === 'yes') {
         if (pendingYaml) {
           try {
             const result = await thyra.applyVillagePack(pendingYaml);
-            console.log('\nVillage Pack applied successfully.', result);
+            settleReply = 'Village Pack applied successfully. ' + JSON.stringify(result);
+            console.log('\n' + settleReply);
           } catch (err) {
-            console.error('\nFailed to apply Village Pack:', err);
+            settleReply = 'Failed to apply Village Pack: ' + String(err);
+            console.error('\n' + settleReply);
           }
+        } else {
+          settleReply = 'No pending YAML to apply.';
+          console.log('\n' + settleReply);
         }
       } else {
-        console.log('\nSettlement cancelled.');
+        settleReply = 'Settlement cancelled.';
+        console.log('\n' + settleReply);
       }
+
+      db.run(
+        'INSERT INTO messages (id, conversation_id, role, content, turn) VALUES (?, ?, ?, ?, ?)',
+        [crypto.randomUUID(), conversationId, 'assistant', settleReply, turn],
+      );
+
       awaitingSettleConfirm = false;
       pendingYaml = null;
       continue;
     }
+
+    turn += 1;
+    db.run(
+      'INSERT INTO messages (id, conversation_id, role, content, turn) VALUES (?, ?, ?, ?, ?)',
+      [crypto.randomUUID(), conversationId, 'user', input, turn],
+    );
 
     const result = await handleTurn(
       llm,
@@ -59,6 +85,18 @@ async function runCli() {
       phase,
     );
     phase = result.phase;
+
+    db.run(
+      'INSERT INTO messages (id, conversation_id, role, content, turn) VALUES (?, ?, ?, ?, ?)',
+      [crypto.randomUUID(), conversationId, 'assistant', result.reply, turn],
+    );
+
+    if (result.phaseChanged) {
+      db.run(
+        "UPDATE conversations SET phase = ?, updated_at = datetime('now') WHERE id = ?",
+        [result.phase, conversationId],
+      );
+    }
 
     console.log(`\n[${result.strategy}] ${result.reply}\n`);
 
