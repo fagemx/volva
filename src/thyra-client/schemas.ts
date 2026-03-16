@@ -117,6 +117,8 @@ export type ChiefData = z.infer<typeof ChiefDataSchema>;
 export const SkillDataSchema = z.object({
   id: z.string(),
   name: z.string(),
+  type: z.string().optional(),
+  description: z.string().optional(),
 });
 export type SkillData = z.infer<typeof SkillDataSchema>;
 

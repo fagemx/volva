@@ -8,6 +8,7 @@ import type { WorldCard, WorkflowCard, TaskCard, AnyCard, CardType, CardDiff } f
 import type { Intent } from '../schemas/intent';
 import type { Strategy } from '../llm/prompts';
 import type { ConversationMode } from '../schemas/conversation';
+import type { SkillData } from '../thyra-client/schemas';
 
 export interface TurnResult {
   reply: string;
@@ -265,6 +266,7 @@ export async function handleTurn(
   currentPhase: Phase,
   mode: ConversationMode = 'world_design',
   nomodStreak = 0,
+  availableSkills?: SkillData[],
 ): Promise<TurnResult> {
   const currentCard = cardManager.getLatest(conversationId);
   const isFirstTurn = !currentCard;
@@ -309,7 +311,7 @@ export async function handleTurn(
   const strategy = pickStrategy(transition.newPhase, intent.type, hasPending, effectiveMode);
 
   // LLM #2: generate reply
-  const reply = await generateReply(llm, strategy, JSON.stringify(updatedContent, null, 2), userMessage);
+  const reply = await generateReply(llm, strategy, JSON.stringify(updatedContent, null, 2), userMessage, availableSkills);
 
   return {
     reply,
