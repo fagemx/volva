@@ -26,6 +26,7 @@ function createMockThyra() {
     getVillage: vi.fn(),
     getActiveConstitution: vi.fn(),
     getChiefs: vi.fn(),
+    getSkills: vi.fn().mockResolvedValue([]),
   } as unknown as ThyraClient;
 }
 

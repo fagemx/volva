@@ -6,6 +6,7 @@ import type { CardManager } from '../cards/card-manager';
 import type { ThyraClient } from '../thyra-client/client';
 import { handleTurn } from '../conductor/turn-handler';
 import { loadVillageState } from '../cards/village-loader';
+import type { SkillData } from '../thyra-client/schemas';
 
 export interface ConversationDeps {
   db: Database;
@@ -69,6 +70,24 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
       );
     }
 
+    // Fetch available skills for workflow_design mode
+    let skills: SkillData[] = [];
+    if (mode === 'workflow_design' && deps.thyra) {
+      try {
+        skills = await deps.thyra.getSkills();
+      } catch (err) {
+        console.error('[conversations] Failed to fetch skills:', err);
+        // Graceful degradation — continue without skills
+      }
+    }
+
+    if (skills.length > 0) {
+      deps.db.run(
+        "UPDATE conversations SET skills_json = ? WHERE id = ?",
+        [JSON.stringify(skills), id],
+      );
+    }
+
     return ok(c, { id, mode, phase, village_id: villageId ?? null, preloaded }, 201);
   });
 
@@ -83,7 +102,7 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
     }
 
     const conv = deps.db
-      .query('SELECT phase, mode, nomod_streak FROM conversations WHERE id = ?')
+      .query('SELECT phase, mode, nomod_streak, skills_json FROM conversations WHERE id = ?')
       .get(conversationId) as Record<string, unknown> | null;
 
     if (!conv) {
@@ -93,6 +112,8 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
     const phase = conv.phase as string;
     const mode = conv.mode as string;
     const nomodStreak = conv.nomod_streak as number;
+    const skillsJson = conv.skills_json as string | null;
+    const skills: SkillData[] = skillsJson ? JSON.parse(skillsJson) as SkillData[] : [];
 
     // Count existing messages to determine turn number
     const turnRow = deps.db
@@ -118,6 +139,7 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
         phase as 'explore' | 'focus' | 'settle',
         mode as 'world_design' | 'workflow_design' | 'task',
         nomodStreak,
+        skills.length > 0 ? skills : undefined,
       );
 
       // Persist assistant reply

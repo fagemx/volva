@@ -62,6 +62,10 @@ export class ThyraClient {
     return this.request('POST', '/api/skills', SkillDataSchema, input);
   }
 
+  async getSkills(): Promise<SkillData[]> {
+    return this.request('GET', '/api/skills', z.array(SkillDataSchema));
+  }
+
   async getVillage(id: string): Promise<VillageData> {
     return this.request('GET', `/api/villages/${id}`, VillageDataSchema);
   }

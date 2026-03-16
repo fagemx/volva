@@ -72,6 +72,21 @@ describe('URL construction', () => {
     expect(capturedUrl).toBe('http://localhost:3462/api/skills');
   });
 
+  it('getSkills → GET /api/skills', async () => {
+    let capturedUrl = '';
+    let capturedMethod = '';
+    const client = new ThyraClient({
+      fetchFn: mockFetch((url, init) => {
+        capturedUrl = url;
+        capturedMethod = init?.method ?? 'GET';
+        return jsonResponse({ ok: true, data: [{ id: '1', name: 'skill1', type: 'retrieval', description: 'A skill' }] });
+      }),
+    });
+    await client.getSkills();
+    expect(capturedUrl).toBe('http://localhost:3462/api/skills');
+    expect(capturedMethod).toBe('GET');
+  });
+
   it('getVillage → GET /api/villages/:id', async () => {
     let capturedUrl = '';
     let capturedMethod = '';
@@ -232,6 +247,37 @@ describe('success response parsing', () => {
     expect(result.chief_id).toBeNull();
     expect(result.skills).toHaveLength(1);
     expect(result.applied).toBe(true);
+  });
+
+  it('getSkills returns typed SkillData array', async () => {
+    const client = new ThyraClient({
+      fetchFn: mockFetch(() =>
+        jsonResponse({
+          ok: true,
+          data: [
+            { id: 's1', name: 'code-review', type: 'analysis', description: 'Reviews code' },
+            { id: 's2', name: 'deploy' },
+          ],
+        })
+      ),
+    });
+    const result = await client.getSkills();
+    expect(result).toHaveLength(2);
+    expect(result[0].name).toBe('code-review');
+    expect(result[0].type).toBe('analysis');
+    expect(result[0].description).toBe('Reviews code');
+    expect(result[1].type).toBeUndefined();
+    expect(result[1].description).toBeUndefined();
+  });
+
+  it('getSkills returns empty array', async () => {
+    const client = new ThyraClient({
+      fetchFn: mockFetch(() =>
+        jsonResponse({ ok: true, data: [] })
+      ),
+    });
+    const result = await client.getSkills();
+    expect(result).toEqual([]);
   });
 
   it('createVillage returns typed VillageData', async () => {
