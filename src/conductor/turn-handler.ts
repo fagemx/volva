@@ -4,8 +4,8 @@ import { parseIntent } from '../llm/intent-parser';
 import { generateReply } from '../llm/response-gen';
 import { checkTransition, type Phase } from './state-machine';
 import { pickStrategy } from './rhythm';
-import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AdapterCard, AnyCard, CardType, CardDiff } from '../schemas/card';
-import { LlmPresetEnum, PlatformEnum } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AdapterCard, CommerceCard, AnyCard, CardType, CardDiff } from '../schemas/card';
+import { LlmPresetEnum, PlatformEnum, OfferingTypeEnum } from '../schemas/card';
 import type { Intent } from '../schemas/intent';
 import type { Strategy } from '../llm/prompts';
 import type { ConversationMode } from '../schemas/conversation';
@@ -83,6 +83,15 @@ export function createEmptyAdapterCard(): AdapterCard {
   };
 }
 
+export function createEmptyCommerceCard(): CommerceCard {
+  return {
+    offerings: [],
+    pricing_rules: [],
+    pending: [],
+    version: 1,
+  };
+}
+
 // ─── Mode / CardType Mapping ───
 
 export function modeToCardType(mode: ConversationMode): CardType {
@@ -97,6 +106,8 @@ export function modeToCardType(mode: ConversationMode): CardType {
       return 'pipeline';
     case 'adapter_config':
       return 'adapter';
+    case 'commerce_design':
+      return 'commerce';
   }
 }
 
@@ -112,6 +123,8 @@ export function createEmptyCard(mode: ConversationMode): AnyCard {
       return createEmptyPipelineCard();
     case 'adapter_config':
       return createEmptyAdapterCard();
+    case 'commerce_design':
+      return createEmptyCommerceCard();
   }
 }
 
@@ -450,6 +463,78 @@ export function applyIntentToAdapterCard(card: AdapterCard, intent: Intent): Ada
   return updated;
 }
 
+function resolveOfferingType(value: string | undefined): CommerceCard['offerings'][number]['type'] {
+  if (value && OfferingTypeEnum.safeParse(value).success) {
+    return value as CommerceCard['offerings'][number]['type'];
+  }
+  return 'stall_slot';
+}
+
+function makeOffering(
+  name: string,
+  description: string,
+  type: CommerceCard['offerings'][number]['type'] = 'stall_slot',
+): CommerceCard['offerings'][number] {
+  return { type, name, description, base_price: null, capacity: null, duration: null };
+}
+
+function makePricingRule(name: string, condition: string): CommerceCard['pricing_rules'][number] {
+  return { name, condition, adjustment_pct: 0 };
+}
+
+function applyCommerceAddInfo(updated: CommerceCard, entities: Record<string, string>): void {
+  const offeringType = resolveOfferingType(entities.offering_type);
+  for (const [key, value] of Object.entries(entities)) {
+    updated.offerings.push(makeOffering(key, value, offeringType));
+  }
+}
+
+function applyCommerceModify(updated: CommerceCard, intent: Intent): void {
+  const target = intent.entities?.target_name;
+  if (!target) return;
+  for (const offering of updated.offerings) {
+    if (offering.name.includes(target)) {
+      offering.description = intent.summary;
+      return;
+    }
+  }
+  for (const rule of updated.pricing_rules) {
+    if (rule.name.includes(target)) {
+      rule.condition = intent.summary;
+      return;
+    }
+  }
+}
+
+export function applyIntentToCommerceCard(card: CommerceCard, intent: Intent): CommerceCard {
+  const updated = structuredClone(card);
+
+  switch (intent.type) {
+    case 'new_intent':
+      updated.offerings.push(makeOffering(intent.summary, intent.summary));
+      break;
+    case 'add_info':
+      if (intent.entities) applyCommerceAddInfo(updated, intent.entities);
+      break;
+    case 'set_boundary':
+    case 'add_constraint':
+      updated.pricing_rules.push(makePricingRule(intent.summary, intent.summary));
+      break;
+    case 'modify':
+      applyCommerceModify(updated, intent);
+      break;
+    case 'add_evaluator_rule':
+    case 'confirm':
+    case 'settle_signal':
+    case 'question':
+    case 'off_topic':
+    case 'style_preference':
+      break;
+  }
+
+  return updated;
+}
+
 export function applyIntent(cardType: CardType, card: AnyCard, intent: Intent): AnyCard {
   switch (cardType) {
     case 'world':
@@ -462,6 +547,8 @@ export function applyIntent(cardType: CardType, card: AnyCard, intent: Intent): 
       return applyIntentToPipelineCard(card as PipelineCard, intent);
     case 'adapter':
       return applyIntentToAdapterCard(card as AdapterCard, intent);
+    case 'commerce':
+      return applyIntentToCommerceCard(card as CommerceCard, intent);
   }
 }
 
@@ -479,6 +566,8 @@ function cardHasPending(cardType: CardType, card: AnyCard): boolean {
       return (card as PipelineCard).pending.length > 0;
     case 'adapter':
       return false;
+    case 'commerce':
+      return (card as CommerceCard).pending.length > 0;
   }
 }
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const SettlementTarget = z.enum(['village_pack', 'workflow', 'task', 'pipeline', 'adapter_config']);
+export const SettlementTarget = z.enum(['village_pack', 'workflow', 'task', 'pipeline', 'adapter_config', 'market_init']);
 export type SettlementTarget = z.infer<typeof SettlementTarget>;
 
 export const SettlementStatus = z.enum(['draft', 'confirmed', 'applied', 'failed']);

@@ -1,4 +1,4 @@
-import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AdapterCard, AnyCard, CardType } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AdapterCard, CommerceCard, AnyCard, CardType } from '../schemas/card';
 import type { IntentType } from '../schemas/intent';
 
 export type { IntentType } from '../schemas/intent';
@@ -237,6 +237,51 @@ function checkAdapterTransition(
   return { newPhase: currentPhase, reason: null };
 }
 
+// ─── CommerceCard Transitions ───
+
+function checkCommerceTransition(
+  currentPhase: Phase,
+  card: CommerceCard,
+  intentType: IntentType,
+  consecutiveNoModTurns: number,
+): TransitionResult {
+  // EXPLORE -> FOCUS: at least 1 offering + 1 pricing rule
+  if (currentPhase === 'explore') {
+    if (card.offerings.length >= 1 && card.pricing_rules.length >= 1) {
+      return { newPhase: 'focus', reason: 'offerings >= 1 + pricing_rules >= 1' };
+    }
+  }
+
+  // FOCUS -> SETTLE
+  if (currentPhase === 'focus') {
+    if (card.pending.length === 0 && intentType === 'confirm') {
+      return { newPhase: 'settle', reason: 'pending empty + user confirmed' };
+    }
+    if (intentType === 'settle_signal') {
+      return { newPhase: 'settle', reason: 'user explicit settle signal' };
+    }
+    if (consecutiveNoModTurns >= 2) {
+      return { newPhase: 'settle', reason: 'consecutive 2 turns with no modification' };
+    }
+  }
+
+  // SETTLE -> EXPLORE
+  if (currentPhase === 'settle') {
+    if (intentType === 'new_intent') {
+      return { newPhase: 'explore', reason: 'new topic after settlement' };
+    }
+  }
+
+  // FOCUS -> EXPLORE (rollback)
+  if (currentPhase === 'focus') {
+    if (intentType === 'new_intent') {
+      return { newPhase: 'explore', reason: 'major direction change' };
+    }
+  }
+
+  return { newPhase: currentPhase, reason: null };
+}
+
 // ─── Dispatcher ───
 
 export function checkTransition(
@@ -257,5 +302,7 @@ export function checkTransition(
       return checkPipelineTransition(currentPhase, card as PipelineCard, intentType, consecutiveNoModTurns);
     case 'adapter':
       return checkAdapterTransition(currentPhase, card as AdapterCard, intentType, consecutiveNoModTurns);
+    case 'commerce':
+      return checkCommerceTransition(currentPhase, card as CommerceCard, intentType, consecutiveNoModTurns);
   }
 }

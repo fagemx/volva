@@ -7,7 +7,8 @@ import { classifySettlement } from '../settlement/router';
 import { buildVillagePack } from '../settlement/village-pack-builder';
 import { buildWorkflowSpec } from '../settlement/workflow-spec-builder';
 import { buildTaskSpec } from '../settlement/task-spec-builder';
-import type { WorldCard, WorkflowCard, TaskCard } from '../schemas/card';
+import { buildCommerceSpec } from '../settlement/commerce-spec-builder';
+import type { WorldCard, WorkflowCard, TaskCard, CommerceCard } from '../schemas/card';
 
 export interface SettlementDeps {
   db: Database;
@@ -67,6 +68,16 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
         [settlementId, conversationId, card.id, target, yaml, 'draft'],
       );
       return ok(c, { id: settlementId, target, payload: yaml, status: 'draft' });
+    }
+
+    if (target === 'market_init') {
+      const json = buildCommerceSpec(card.content as CommerceCard);
+      const settlementId = crypto.randomUUID();
+      deps.db.run(
+        'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [settlementId, conversationId, card.id, target, json, 'draft'],
+      );
+      return ok(c, { id: settlementId, target, payload: json, status: 'draft' });
     }
 
     // target === 'task'

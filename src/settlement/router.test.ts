@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { classifySettlement } from './router';
-import type { WorldCard, WorkflowCard, TaskCard, PipelineCard } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, CommerceCard } from '../schemas/card';
 
 const emptyWorldCard: WorldCard = {
   goal: null,
@@ -103,5 +103,27 @@ describe('classifySettlement', () => {
       version: 1,
     };
     expect(classifySettlement('pipeline', card)).toBeNull();
+  });
+
+  it('CommerceCard with offerings → market_init', () => {
+    const card: CommerceCard = {
+      offerings: [
+        { type: 'stall_slot', name: 'Basic', description: 'A stall', base_price: 100, capacity: null, duration: null },
+      ],
+      pricing_rules: [],
+      pending: [],
+      version: 1,
+    };
+    expect(classifySettlement('commerce', card)).toBe('market_init');
+  });
+
+  it('CommerceCard with empty offerings → null', () => {
+    const card: CommerceCard = {
+      offerings: [],
+      pricing_rules: [],
+      pending: [],
+      version: 1,
+    };
+    expect(classifySettlement('commerce', card)).toBeNull();
   });
 });
