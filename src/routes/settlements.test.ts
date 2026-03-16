@@ -34,6 +34,7 @@ const WORLD_CARD_CONTENT: WorldCard = {
     soft_rules: [],
     must_have: ['deploy', 'monitor', 'alert'],
     success_criteria: ['uptime > 99%'],
+    evaluator_rules: [],
   },
   pending: [],
   chief_draft: { name: 'Chief', role: 'leader', style: 'strict' },

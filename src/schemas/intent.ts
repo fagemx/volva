@@ -6,6 +6,7 @@ export const IntentType = z.enum([
   'add_info',
   'set_boundary',
   'add_constraint',
+  'add_evaluator_rule',
   'style_preference',
   'confirm',
   'modify',

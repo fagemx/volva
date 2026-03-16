@@ -5,7 +5,7 @@ import type { WorldCard, WorkflowCard, TaskCard, PipelineCard } from '../schemas
 const emptyWorldCard: WorldCard = {
   goal: null,
   target_repo: null,
-  confirmed: { hard_rules: [], soft_rules: [], must_have: [], success_criteria: [] },
+  confirmed: { hard_rules: [], soft_rules: [], must_have: [], success_criteria: [], evaluator_rules: [] },
   pending: [],
   chief_draft: null,
   budget_draft: null,

@@ -5,6 +5,7 @@ import {
   WorkflowCardSchema,
   TaskCardSchema,
   LlmPresetEnum,
+  EvaluatorRuleSchema,
 } from './card';
 
 // ─── CardType ───
@@ -46,6 +47,7 @@ describe('WorldCardSchema', () => {
       soft_rules: [{ description: 'Avoid robotic tone', scope: ['*'] }],
       must_have: ['24/7 availability'],
       success_criteria: ['90% satisfaction rate'],
+      evaluator_rules: [],
     },
     pending: [
       { question: 'What languages?', context: 'User mentioned international' },
@@ -78,6 +80,7 @@ describe('WorldCardSchema', () => {
         soft_rules: [],
         must_have: [],
         success_criteria: [],
+        evaluator_rules: [],
       },
       pending: [],
       chief_draft: null,
@@ -147,6 +150,47 @@ describe('WorldCardSchema', () => {
     const result = WorldCardSchema.safeParse({
       ...validWorldCard,
       pending: [{ question: 'missing context' }],
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ─── EvaluatorRule ───
+
+describe('EvaluatorRuleSchema', () => {
+  const validRule = {
+    name: 'price-cap',
+    trigger: 'price_adjustment',
+    condition: 'adjustment_percent <= 20',
+    on_fail: { risk: 'high', action: 'reject' },
+  };
+
+  it('parses a valid evaluator rule', () => {
+    const result = EvaluatorRuleSchema.safeParse(validRule);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects missing name', () => {
+    const result = EvaluatorRuleSchema.safeParse({
+      trigger: validRule.trigger,
+      condition: validRule.condition,
+      on_fail: validRule.on_fail,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects invalid risk level', () => {
+    const result = EvaluatorRuleSchema.safeParse({
+      ...validRule,
+      on_fail: { risk: 'critical', action: 'warn' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects invalid action', () => {
+    const result = EvaluatorRuleSchema.safeParse({
+      ...validRule,
+      on_fail: { risk: 'low', action: 'delete' },
     });
     expect(result.success).toBe(false);
   });

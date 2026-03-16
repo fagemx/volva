@@ -34,7 +34,7 @@ export function createEmptyWorldCard(): WorldCard {
   return {
     goal: null,
     target_repo: null,
-    confirmed: { hard_rules: [], soft_rules: [], must_have: [], success_criteria: [] },
+    confirmed: { hard_rules: [], soft_rules: [], must_have: [], success_criteria: [], evaluator_rules: [] },
     pending: [],
     chief_draft: null,
     budget_draft: null,
@@ -104,6 +104,32 @@ export function createEmptyCard(mode: ConversationMode): AnyCard {
   }
 }
 
+// ─── Evaluator Rule Helper ───
+
+function toRisk(value: string): 'low' | 'medium' | 'high' {
+  if (value === 'low' || value === 'medium' || value === 'high') return value;
+  return 'medium';
+}
+
+function toAction(value: string): 'warn' | 'require_human_approval' | 'reject' {
+  if (value === 'warn' || value === 'require_human_approval' || value === 'reject') return value;
+  return 'warn';
+}
+
+function applyAddEvaluatorRule(updated: WorldCard, intent: Intent): void {
+  if (!intent.entities) return;
+  const e = intent.entities;
+  updated.confirmed.evaluator_rules.push({
+    name: e.name || intent.summary,
+    trigger: e.trigger || '',
+    condition: e.condition || '',
+    on_fail: {
+      risk: toRisk(e.risk),
+      action: toAction(e.action),
+    },
+  });
+}
+
 // ─── Modify Rule Helper ───
 
 function applyModifyRule(updated: WorldCard, intent: Intent): void {
@@ -121,6 +147,13 @@ function applyModifyRule(updated: WorldCard, intent: Intent): void {
   for (const rule of updated.confirmed.soft_rules) {
     if (rule.description.includes(targetRule)) {
       rule.description = `[changed] ${intent.summary}`;
+      return;
+    }
+  }
+
+  for (const rule of updated.confirmed.evaluator_rules) {
+    if (rule.name.includes(targetRule)) {
+      rule.name = `[changed] ${intent.summary}`;
       return;
     }
   }
@@ -159,6 +192,9 @@ export function applyIntentToCard(card: WorldCard, intent: Intent): WorldCard {
       break;
     case 'add_constraint':
       updated.confirmed.soft_rules.push({ description: intent.summary, scope: ['*'] });
+      break;
+    case 'add_evaluator_rule':
+      applyAddEvaluatorRule(updated, intent);
       break;
     case 'style_preference':
       if (!updated.chief_draft) {
@@ -211,6 +247,7 @@ export function applyIntentToWorkflowCard(card: WorkflowCard, intent: Intent): W
     case 'add_constraint':
       updated.confirmed.failure_handling.push(intent.summary);
       break;
+    case 'add_evaluator_rule':
     case 'confirm':
     case 'settle_signal':
     case 'modify':
@@ -241,6 +278,7 @@ export function applyIntentToTaskCard(card: TaskCard, intent: Intent): TaskCard 
     case 'add_constraint':
       updated.constraints.push(intent.summary);
       break;
+    case 'add_evaluator_rule':
     case 'confirm':
     case 'settle_signal':
     case 'modify':

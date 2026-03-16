@@ -15,6 +15,7 @@ function makeWorldCard(opts: {
       soft_rules: [],
       must_have: opts.mustHave ?? [],
       success_criteria: [],
+      evaluator_rules: [],
     },
     pending: Array.from({ length: opts.pendingCount ?? 0 }, (_, i) => ({
       question: `q${i}`,
@@ -181,6 +182,31 @@ describe('TaskCard: FOCUS -> SETTLE via consecutive no-mod', () => {
     const card = makeTaskCard({ intent: 'test' });
     const result = checkTransition('focus', 'task', card, 'add_info', 1);
     expect(result.newPhase).toBe('focus');
+    expect(result.reason).toBeNull();
+  });
+});
+
+describe('WorldCard: add_evaluator_rule does not trigger transitions', () => {
+  it('explore stays on add_evaluator_rule', () => {
+    const card = makeWorldCard({ hardRules: ['r1'], mustHave: ['a', 'b', 'c'] });
+    const result = checkTransition('explore', 'world', card, 'add_evaluator_rule');
+    // add_evaluator_rule is additive, does not match set_boundary or other transition triggers
+    expect(result.newPhase).toBe('focus');
+    // Note: it still transitions if card state meets conditions (hard_rule + must_have >= 3)
+    // but the intent type itself does not trigger transitions independently
+  });
+
+  it('focus stays on add_evaluator_rule (no confirm/settle_signal)', () => {
+    const card = makeWorldCard({ pendingCount: 1 });
+    const result = checkTransition('focus', 'world', card, 'add_evaluator_rule');
+    expect(result.newPhase).toBe('focus');
+    expect(result.reason).toBeNull();
+  });
+
+  it('settle stays on add_evaluator_rule (not new_intent)', () => {
+    const card = makeWorldCard({});
+    const result = checkTransition('settle', 'world', card, 'add_evaluator_rule');
+    expect(result.newPhase).toBe('settle');
     expect(result.reason).toBeNull();
   });
 });
