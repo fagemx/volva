@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // ─── Enums ───
 
-export const ConversationMode = z.enum(['world_design', 'workflow_design', 'task', 'pipeline_design']);
+export const ConversationMode = z.enum(['world_design', 'workflow_design', 'task', 'pipeline_design', 'adapter_config']);
 export type ConversationMode = z.infer<typeof ConversationMode>;
 
 export const ConductorPhase = z.enum(['explore', 'focus', 'settle']);

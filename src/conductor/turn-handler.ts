@@ -4,8 +4,8 @@ import { parseIntent } from '../llm/intent-parser';
 import { generateReply } from '../llm/response-gen';
 import { checkTransition, type Phase } from './state-machine';
 import { pickStrategy } from './rhythm';
-import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AnyCard, CardType, CardDiff } from '../schemas/card';
-import { LlmPresetEnum } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AdapterCard, AnyCard, CardType, CardDiff } from '../schemas/card';
+import { LlmPresetEnum, PlatformEnum } from '../schemas/card';
 import type { Intent } from '../schemas/intent';
 import type { Strategy } from '../llm/prompts';
 import type { ConversationMode } from '../schemas/conversation';
@@ -76,6 +76,13 @@ export function createEmptyPipelineCard(): PipelineCard {
   };
 }
 
+export function createEmptyAdapterCard(): AdapterCard {
+  return {
+    platforms: [],
+    version: 1,
+  };
+}
+
 // ─── Mode / CardType Mapping ───
 
 export function modeToCardType(mode: ConversationMode): CardType {
@@ -88,6 +95,8 @@ export function modeToCardType(mode: ConversationMode): CardType {
       return 'task';
     case 'pipeline_design':
       return 'pipeline';
+    case 'adapter_config':
+      return 'adapter';
   }
 }
 
@@ -101,6 +110,8 @@ export function createEmptyCard(mode: ConversationMode): AnyCard {
       return createEmptyTaskCard();
     case 'pipeline_design':
       return createEmptyPipelineCard();
+    case 'adapter_config':
+      return createEmptyAdapterCard();
   }
 }
 
@@ -381,6 +392,64 @@ export function applyIntentToPipelineCard(card: PipelineCard, intent: Intent): P
   return updated;
 }
 
+function applyAdapterNewIntent(updated: AdapterCard, summary: string): void {
+  const words = summary.toLowerCase().split(/[\s,]+/);
+  for (const word of words) {
+    if (PlatformEnum.safeParse(word).success) {
+      const platform = word as AdapterCard['platforms'][number]['platform'];
+      if (!updated.platforms.some((p) => p.platform === platform)) {
+        updated.platforms.push({ platform, enabled: true, role: '' });
+      }
+    }
+  }
+}
+
+function applyAdapterAddInfo(updated: AdapterCard, entities: Record<string, string>): void {
+  for (const [key, value] of Object.entries(entities)) {
+    const existing = updated.platforms.find((p) => p.platform === key);
+    if (existing) {
+      existing.role = value;
+    }
+  }
+}
+
+function applyAdapterBoundary(updated: AdapterCard, intent: Intent): void {
+  if (!intent.entities) return;
+  const target = intent.entities.platform;
+  if (!target) return;
+  const existing = updated.platforms.find((p) => p.platform === target);
+  if (existing) {
+    existing.role = intent.summary;
+  }
+}
+
+export function applyIntentToAdapterCard(card: AdapterCard, intent: Intent): AdapterCard {
+  const updated = structuredClone(card);
+
+  switch (intent.type) {
+    case 'new_intent':
+      applyAdapterNewIntent(updated, intent.summary);
+      break;
+    case 'add_info':
+      if (intent.entities) applyAdapterAddInfo(updated, intent.entities);
+      break;
+    case 'set_boundary':
+      applyAdapterBoundary(updated, intent);
+      break;
+    case 'add_constraint':
+    case 'add_evaluator_rule':
+    case 'confirm':
+    case 'settle_signal':
+    case 'modify':
+    case 'question':
+    case 'off_topic':
+    case 'style_preference':
+      break;
+  }
+
+  return updated;
+}
+
 export function applyIntent(cardType: CardType, card: AnyCard, intent: Intent): AnyCard {
   switch (cardType) {
     case 'world':
@@ -391,6 +460,8 @@ export function applyIntent(cardType: CardType, card: AnyCard, intent: Intent): 
       return applyIntentToTaskCard(card as TaskCard, intent);
     case 'pipeline':
       return applyIntentToPipelineCard(card as PipelineCard, intent);
+    case 'adapter':
+      return applyIntentToAdapterCard(card as AdapterCard, intent);
   }
 }
 
@@ -406,6 +477,8 @@ function cardHasPending(cardType: CardType, card: AnyCard): boolean {
       return false;
     case 'pipeline':
       return (card as PipelineCard).pending.length > 0;
+    case 'adapter':
+      return false;
   }
 }
 

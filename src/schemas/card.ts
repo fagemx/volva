@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // ─── Shared Sub-schemas ───
 
-export const CardTypeEnum = z.enum(['world', 'workflow', 'task', 'pipeline']);
+export const CardTypeEnum = z.enum(['world', 'workflow', 'task', 'pipeline', 'adapter']);
 export type CardType = z.infer<typeof CardTypeEnum>;
 
 const VersionSchema = z.number().int().min(1);
@@ -137,9 +137,27 @@ export const PipelineCardSchema = z.object({
 
 export type PipelineCard = z.infer<typeof PipelineCardSchema>;
 
+// ─── AdapterCard ───
+
+export const PlatformEnum = z.enum(['x', 'discord', 'telegram', 'owned_page']);
+export type Platform = z.infer<typeof PlatformEnum>;
+
+const PlatformConfigSchema = z.object({
+  platform: PlatformEnum,
+  enabled: z.boolean(),
+  role: z.string(),
+});
+
+export const AdapterCardSchema = z.object({
+  platforms: z.array(PlatformConfigSchema),
+  version: VersionSchema,
+});
+
+export type AdapterCard = z.infer<typeof AdapterCardSchema>;
+
 // ─── Union type for downstream consumers ───
 
-export type AnyCard = WorldCard | WorkflowCard | TaskCard | PipelineCard;
+export type AnyCard = WorldCard | WorkflowCard | TaskCard | PipelineCard | AdapterCard;
 
 // ─── Card Diff ───
 
