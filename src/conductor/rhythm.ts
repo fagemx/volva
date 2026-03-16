@@ -10,14 +10,13 @@ export function pickStrategy(
   mode?: ConversationMode,
 ): Strategy {
   switch (phase) {
-    case 'explore':
+    case 'explore': {
       if (mode === 'task' && intentType === 'confirm') return 'settle';
-      if (mode === 'pipeline_design' && intentType === 'add_info') return 'probe';
-      if (mode === 'adapter_config' && intentType === 'add_info') return 'probe';
-      if (mode === 'commerce_design' && intentType === 'add_info') return 'probe';
-      if (intentType === 'new_intent') return 'mirror';
-      if (intentType === 'set_boundary') return 'mirror';
+      const probeModes: ConversationMode[] = ['pipeline_design', 'adapter_config', 'commerce_design', 'org_design'];
+      if (probeModes.includes(mode ?? 'world_design') && intentType === 'add_info') return 'probe';
+      if (intentType === 'new_intent' || intentType === 'set_boundary') return 'mirror';
       return 'probe';
+    }
     case 'focus':
       if (intentType === 'confirm' && !hasPending) return 'settle';
       if (intentType === 'confirm') return 'propose';

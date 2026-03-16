@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // ─── Shared Sub-schemas ───
 
-export const CardTypeEnum = z.enum(['world', 'workflow', 'task', 'pipeline', 'adapter', 'commerce']);
+export const CardTypeEnum = z.enum(['world', 'workflow', 'task', 'pipeline', 'adapter', 'commerce', 'org']);
 export type CardType = z.infer<typeof CardTypeEnum>;
 
 const VersionSchema = z.number().int().min(1);
@@ -184,9 +184,36 @@ export const CommerceCardSchema = z.object({
 
 export type CommerceCard = z.infer<typeof CommerceCardSchema>;
 
+// ─── OrgCard ───
+
+const DepartmentSchema = z.object({
+  name: z.string(),
+  chief: z.string().nullable(),
+  workers: z.array(z.string()),
+  pipeline_refs: z.array(z.string()),
+});
+
+export const OrgCardSchema = z.object({
+  director: z.object({
+    name: z.string().nullable(),
+    role: z.string().nullable(),
+    style: z.string().nullable(),
+  }).nullable(),
+  departments: z.array(DepartmentSchema),
+  governance: z.object({
+    cycle: z.string().nullable(),
+    chief_order: z.array(z.string()),
+    escalation: z.string().nullable(),
+  }),
+  pending: z.array(PendingItemSchema),
+  version: VersionSchema,
+});
+
+export type OrgCard = z.infer<typeof OrgCardSchema>;
+
 // ─── Union type for downstream consumers ───
 
-export type AnyCard = WorldCard | WorkflowCard | TaskCard | PipelineCard | AdapterCard | CommerceCard;
+export type AnyCard = WorldCard | WorkflowCard | TaskCard | PipelineCard | AdapterCard | CommerceCard | OrgCard;
 
 // ─── Card Diff ───
 

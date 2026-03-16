@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { classifySettlement } from './router';
-import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, CommerceCard } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, CommerceCard, OrgCard } from '../schemas/card';
 
 const emptyWorldCard: WorldCard = {
   goal: null,
@@ -125,5 +125,29 @@ describe('classifySettlement', () => {
       version: 1,
     };
     expect(classifySettlement('commerce', card)).toBeNull();
+  });
+
+  it('OrgCard with departments → org_hierarchy', () => {
+    const card: OrgCard = {
+      director: { name: 'Alice', role: 'CTO', style: null },
+      departments: [
+        { name: 'Engineering', chief: 'Bob', workers: ['Carol'], pipeline_refs: [] },
+      ],
+      governance: { cycle: null, chief_order: [], escalation: null },
+      pending: [],
+      version: 1,
+    };
+    expect(classifySettlement('org', card)).toBe('org_hierarchy');
+  });
+
+  it('OrgCard with empty departments → null', () => {
+    const card: OrgCard = {
+      director: null,
+      departments: [],
+      governance: { cycle: null, chief_order: [], escalation: null },
+      pending: [],
+      version: 1,
+    };
+    expect(classifySettlement('org', card)).toBeNull();
   });
 });

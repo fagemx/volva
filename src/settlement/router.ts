@@ -1,4 +1,4 @@
-import type { CardType, AnyCard, WorldCard, WorkflowCard, PipelineCard, AdapterCard, CommerceCard } from '../schemas/card';
+import type { CardType, AnyCard, WorldCard, WorkflowCard, PipelineCard, AdapterCard, CommerceCard, OrgCard } from '../schemas/card';
 import type { SettlementTarget } from '../schemas/settlement';
 
 export function classifySettlement(
@@ -40,6 +40,13 @@ export function classifySettlement(
       const commerceCard = card as CommerceCard;
       if (commerceCard.offerings.length > 0) {
         return 'market_init';
+      }
+      return null;
+    }
+    case 'org': {
+      const orgCard = card as OrgCard;
+      if (orgCard.departments.length > 0) {
+        return 'org_hierarchy';
       }
       return null;
     }

@@ -4,6 +4,7 @@ import {
   WorldCardSchema,
   WorkflowCardSchema,
   TaskCardSchema,
+  OrgCardSchema,
   LlmPresetEnum,
   EvaluatorRuleSchema,
 } from './card';
@@ -327,5 +328,90 @@ describe('TaskCardSchema', () => {
       inputs: { count: 42 },
     });
     expect(result.success).toBe(false);
+  });
+});
+
+// ─── OrgCard ───
+
+describe('OrgCardSchema', () => {
+  const validOrgCard = {
+    director: {
+      name: 'Alice',
+      role: 'CTO',
+      style: 'collaborative',
+    },
+    departments: [
+      {
+        name: 'Engineering',
+        chief: 'Bob',
+        workers: ['Carol', 'Dave'],
+        pipeline_refs: ['ci-pipeline'],
+      },
+    ],
+    governance: {
+      cycle: 'weekly',
+      chief_order: ['engineering', 'marketing'],
+      escalation: 'escalate to director',
+    },
+    pending: [],
+    version: 1,
+  };
+
+  it('parses a valid OrgCard', () => {
+    const result = OrgCardSchema.safeParse(validOrgCard);
+    expect(result.success).toBe(true);
+  });
+
+  it('parses OrgCard with all nullable fields set to null', () => {
+    const result = OrgCardSchema.safeParse({
+      director: null,
+      departments: [],
+      governance: {
+        cycle: null,
+        chief_order: [],
+        escalation: null,
+      },
+      pending: [],
+      version: 1,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('parses OrgCard with director fields set to null', () => {
+    const result = OrgCardSchema.safeParse({
+      ...validOrgCard,
+      director: { name: null, role: null, style: null },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects missing departments', () => {
+    const result = OrgCardSchema.safeParse({
+      director: null,
+      governance: validOrgCard.governance,
+      pending: [],
+      version: 1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects version < 1', () => {
+    const result = OrgCardSchema.safeParse({
+      ...validOrgCard,
+      version: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects invalid department (missing name)', () => {
+    const result = OrgCardSchema.safeParse({
+      ...validOrgCard,
+      departments: [{ chief: null, workers: [], pipeline_refs: [] }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts org as valid card type', () => {
+    expect(CardTypeEnum.parse('org')).toBe('org');
   });
 });
