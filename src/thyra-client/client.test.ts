@@ -124,7 +124,7 @@ describe('URL construction', () => {
       fetchFn: mockFetch((url, init) => {
         capturedUrl = url;
         capturedBody = init?.body as string;
-        return jsonResponse({ ok: true, data: { village_id: 'v1', applied: true } });
+        return jsonResponse({ ok: true, data: { village_id: 'v1', constitution_id: 'c1', chief_id: 'ch1', skills: [{ id: 's1', name: 'skill1' }], applied: true } });
       }),
     });
     await client.applyVillagePack('village:\n  name: test');
@@ -209,6 +209,29 @@ describe('success response parsing', () => {
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('Chief');
     expect(result[0].role).toBe('support');
+  });
+
+  it('applyVillagePack returns typed PackApplyData with all fields', async () => {
+    const client = new ThyraClient({
+      fetchFn: mockFetch(() =>
+        jsonResponse({
+          ok: true,
+          data: {
+            village_id: 'v1',
+            constitution_id: 'c1',
+            chief_id: null,
+            skills: [{ id: 's1', name: 'skill1' }],
+            applied: true,
+          },
+        })
+      ),
+    });
+    const result = await client.applyVillagePack('village:\n  name: test');
+    expect(result.village_id).toBe('v1');
+    expect(result.constitution_id).toBe('c1');
+    expect(result.chief_id).toBeNull();
+    expect(result.skills).toHaveLength(1);
+    expect(result.applied).toBe(true);
   });
 
   it('createVillage returns typed VillageData', async () => {

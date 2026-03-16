@@ -150,7 +150,10 @@ describe('Settlement lifecycle', () => {
 
       (thyra.applyVillagePack as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         village_id: 'v-123',
-        created: true,
+        constitution_id: 'c-1',
+        chief_id: 'ch-1',
+        skills: [{ id: 's-1', name: 'deploy' }],
+        applied: true,
       });
 
       // Confirm
@@ -216,7 +219,10 @@ describe('Settlement lifecycle', () => {
 
       (thyra.applyVillagePack as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         village_id: 'v-123',
-        created: true,
+        constitution_id: 'c-1',
+        chief_id: 'ch-1',
+        skills: [{ id: 's-1', name: 'deploy' }],
+        applied: true,
       });
       await jsonPost(app, `/api/conversations/${conversationId}/settle/confirm`);
 
@@ -270,6 +276,10 @@ describe('Settlement lifecycle', () => {
       // Confirm with success
       (thyra.applyVillagePack as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         village_id: 'v-456',
+        constitution_id: 'c-2',
+        chief_id: 'ch-2',
+        skills: [{ id: 's-2', name: 'monitor' }],
+        applied: true,
       });
       await jsonPost(app, `/api/conversations/${conversationId}/settle/confirm`);
 
