@@ -26,6 +26,18 @@ export const RuleSchema = z.object({
 
 export type Rule = z.infer<typeof RuleSchema>;
 
+export const EvaluatorRuleSchema = z.object({
+  name: z.string(),
+  trigger: z.string(),
+  condition: z.string(),
+  on_fail: z.object({
+    risk: z.enum(['low', 'medium', 'high']),
+    action: z.enum(['warn', 'require_human_approval', 'reject']),
+  }),
+});
+
+export type EvaluatorRule = z.infer<typeof EvaluatorRuleSchema>;
+
 export const WorldCardSchema = z.object({
   goal: z.string().nullable(),
   target_repo: z.string().nullable(),
@@ -34,6 +46,7 @@ export const WorldCardSchema = z.object({
     soft_rules: z.array(RuleSchema),
     must_have: z.array(z.string()),
     success_criteria: z.array(z.string()),
+    evaluator_rules: z.array(EvaluatorRuleSchema),
   }),
   pending: z.array(PendingItemSchema),
   chief_draft: z

@@ -11,6 +11,7 @@ const baseCard: WorldCard = {
     soft_rules: [{ description: 'Be polite', scope: ['*'] }],
     must_have: ['Product FAQ', 'Inventory Check'],
     success_criteria: [],
+    evaluator_rules: [],
   },
   pending: [],
   chief_draft: { name: 'Bot', role: 'support', style: 'warm' },
@@ -127,5 +128,37 @@ describe('buildVillagePack', () => {
     const result = yaml.load(buildVillagePack(card)) as Record<string, unknown>;
     const llm = result.llm as Record<string, unknown>;
     expect(llm.preset).toBe('balanced');
+  });
+
+  it('includes evaluator_rules in constitution when present', () => {
+    const card: WorldCard = {
+      ...baseCard,
+      confirmed: {
+        ...baseCard.confirmed,
+        evaluator_rules: [
+          {
+            name: 'price-cap',
+            trigger: 'price_adjustment',
+            condition: 'adjustment <= 20%',
+            on_fail: { risk: 'high', action: 'reject' },
+          },
+        ],
+      },
+    };
+    const result = yaml.load(buildVillagePack(card)) as Record<string, unknown>;
+    const constitution = result.constitution as Record<string, unknown>;
+    const evalRules = constitution.evaluator_rules as Array<Record<string, unknown>>;
+    expect(evalRules).toHaveLength(1);
+    expect(evalRules[0].name).toBe('price-cap');
+    expect(evalRules[0].trigger).toBe('price_adjustment');
+    const onFail = evalRules[0].on_fail as Record<string, unknown>;
+    expect(onFail.risk).toBe('high');
+    expect(onFail.action).toBe('reject');
+  });
+
+  it('omits evaluator_rules key when array is empty', () => {
+    const result = yaml.load(buildVillagePack(baseCard)) as Record<string, unknown>;
+    const constitution = result.constitution as Record<string, unknown>;
+    expect(constitution.evaluator_rules).toBeUndefined();
   });
 });

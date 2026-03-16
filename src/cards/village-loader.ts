@@ -42,6 +42,7 @@ export function loadVillageState(
       soft_rules: softRules,
       must_have: [],
       success_criteria: [],
+      evaluator_rules: [],
     },
     pending: [],
     chief_draft: chiefDraft,

@@ -109,6 +109,53 @@ describe('applyIntentToCard', () => {
     expect(result.confirmed.must_have).toEqual(['turbo']);
   });
 
+  it('add_evaluator_rule pushes to evaluator_rules', () => {
+    const card = createEmptyWorldCard();
+    const result = applyIntentToCard(card, {
+      type: 'add_evaluator_rule',
+      summary: 'price cap rule',
+      entities: {
+        name: 'price-cap',
+        trigger: 'price_adjustment',
+        condition: 'adjustment <= 20%',
+        risk: 'high',
+        action: 'reject',
+      },
+    });
+    expect(result.confirmed.evaluator_rules).toHaveLength(1);
+    expect(result.confirmed.evaluator_rules[0]).toMatchObject({
+      name: 'price-cap',
+      trigger: 'price_adjustment',
+      condition: 'adjustment <= 20%',
+      on_fail: { risk: 'high', action: 'reject' },
+    });
+  });
+
+  it('add_evaluator_rule without entities does not add rule', () => {
+    const card = createEmptyWorldCard();
+    const result = applyIntentToCard(card, {
+      type: 'add_evaluator_rule',
+      summary: 'some rule',
+    });
+    expect(result.confirmed.evaluator_rules).toHaveLength(0);
+  });
+
+  it('modify intent can update evaluator rule by name', () => {
+    const card = createEmptyWorldCard();
+    card.confirmed.evaluator_rules.push({
+      name: 'price-cap',
+      trigger: 'price_adjustment',
+      condition: 'adjustment <= 20%',
+      on_fail: { risk: 'high', action: 'reject' },
+    });
+    const result = applyIntentToCard(card, {
+      type: 'modify',
+      summary: 'updated price cap to 30%',
+      entities: { target_rule: 'price-cap' },
+    });
+    expect(result.confirmed.evaluator_rules[0].name).toBe('[changed] updated price cap to 30%');
+  });
+
   it('does not increment version (CardManager owns versioning)', () => {
     const card = createEmptyWorldCard();
     expect(card.version).toBe(1);

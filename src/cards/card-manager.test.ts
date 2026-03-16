@@ -12,6 +12,7 @@ const minimalWorldCard: WorldCard = {
     soft_rules: [],
     must_have: [],
     success_criteria: [],
+    evaluator_rules: [],
   },
   pending: [],
   chief_draft: null,
@@ -29,6 +30,7 @@ const fullWorldCard: WorldCard = {
     soft_rules: [{ description: 'Avoid robotic tone', scope: ['*'] }],
     must_have: ['24/7 availability'],
     success_criteria: ['90% satisfaction'],
+    evaluator_rules: [],
   },
   pending: [
     { question: 'What languages?', context: 'User mentioned intl' },

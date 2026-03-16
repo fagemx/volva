@@ -15,6 +15,12 @@ interface VillagePack {
   village: { name: string; target_repo: string };
   constitution: {
     rules: Array<{ description: string; enforcement: string; scope: string[] }>;
+    evaluator_rules?: Array<{
+      name: string;
+      trigger: string;
+      condition: string;
+      on_fail: { risk: string; action: string };
+    }>;
     allowed_permissions: string[];
     budget_limits?: {
       max_cost_per_action: number;
@@ -69,6 +75,15 @@ export function buildVillagePack(card: WorldCard): string {
       max_cost_per_day: card.budget_draft.per_day ?? 0,
       max_cost_per_loop: 50,
     };
+  }
+
+  if (card.confirmed.evaluator_rules.length > 0) {
+    pack.constitution.evaluator_rules = card.confirmed.evaluator_rules.map((r) => ({
+      name: r.name,
+      trigger: r.trigger,
+      condition: r.condition,
+      on_fail: { risk: r.on_fail.risk, action: r.on_fail.action },
+    }));
   }
 
   if (card.chief_draft) {
