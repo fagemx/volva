@@ -5,6 +5,7 @@ import { generateReply } from '../llm/response-gen';
 import { checkTransition, type Phase } from './state-machine';
 import { pickStrategy } from './rhythm';
 import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AnyCard, CardType, CardDiff } from '../schemas/card';
+import { LlmPresetEnum } from '../schemas/card';
 import type { Intent } from '../schemas/intent';
 import type { Strategy } from '../llm/prompts';
 import type { ConversationMode } from '../schemas/conversation';
@@ -37,6 +38,7 @@ export function createEmptyWorldCard(): WorldCard {
     pending: [],
     chief_draft: null,
     budget_draft: null,
+    llm_preset: null,
     current_proposal: null,
     version: 1,
   };
@@ -137,7 +139,11 @@ export function applyIntentToCard(card: WorldCard, intent: Intent): WorldCard {
       break;
     case 'add_info':
       if (intent.entities) {
-        for (const [, value] of Object.entries(intent.entities)) {
+        for (const [key, value] of Object.entries(intent.entities)) {
+          if (key === 'llm_preset' && LlmPresetEnum.safeParse(value).success) {
+            updated.llm_preset = value as 'economy' | 'balanced' | 'performance';
+            continue;
+          }
           if (!updated.confirmed.must_have.includes(value)) {
             updated.confirmed.must_have.push(value);
           }

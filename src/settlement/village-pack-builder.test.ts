@@ -15,6 +15,7 @@ const baseCard: WorldCard = {
   pending: [],
   chief_draft: { name: 'Bot', role: 'support', style: 'warm' },
   budget_draft: { per_action: 5, per_day: 200 },
+  llm_preset: 'economy',
   current_proposal: null,
   version: 3,
 };
@@ -105,5 +106,26 @@ describe('buildVillagePack', () => {
     const result = yaml.load(buildVillagePack(card)) as Record<string, unknown>;
     const constitution = result.constitution as Record<string, unknown>;
     expect(constitution.budget_limits).toBeUndefined();
+  });
+
+  it('includes llm section with preset from card', () => {
+    const result = yaml.load(buildVillagePack(baseCard)) as Record<string, unknown>;
+    const llm = result.llm as Record<string, unknown>;
+    expect(llm).toBeDefined();
+    expect(llm.preset).toBe('economy');
+  });
+
+  it('includes llm section with performance preset', () => {
+    const card: WorldCard = { ...baseCard, llm_preset: 'performance' };
+    const result = yaml.load(buildVillagePack(card)) as Record<string, unknown>;
+    const llm = result.llm as Record<string, unknown>;
+    expect(llm.preset).toBe('performance');
+  });
+
+  it('defaults llm preset to balanced when llm_preset is null', () => {
+    const card: WorldCard = { ...baseCard, llm_preset: null };
+    const result = yaml.load(buildVillagePack(card)) as Record<string, unknown>;
+    const llm = result.llm as Record<string, unknown>;
+    expect(llm.preset).toBe('balanced');
   });
 });

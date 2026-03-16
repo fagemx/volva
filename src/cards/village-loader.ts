@@ -46,6 +46,7 @@ export function loadVillageState(
     pending: [],
     chief_draft: chiefDraft,
     budget_draft: budgetDraft,
+    llm_preset: null,
     current_proposal: null,
     version: 1,
   };

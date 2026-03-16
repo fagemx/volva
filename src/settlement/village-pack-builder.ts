@@ -28,6 +28,7 @@ interface VillagePack {
     personality: string;
     permissions: string[];
   };
+  llm?: { preset: string };
   skills: Array<{ name: string; type: string; description: string }>;
   laws: never[];
 }
@@ -53,6 +54,7 @@ export function buildVillagePack(card: WorldCard): string {
       ],
       allowed_permissions: ['dispatch_task', 'propose_law'],
     },
+    llm: { preset: card.llm_preset ?? 'balanced' },
     skills: card.confirmed.must_have.map((item, i) => ({
       name: slugify(item, i),
       type: 'generic',

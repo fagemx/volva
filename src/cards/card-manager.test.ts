@@ -16,6 +16,7 @@ const minimalWorldCard: WorldCard = {
   pending: [],
   chief_draft: null,
   budget_draft: null,
+  llm_preset: null,
   current_proposal: null,
   version: 1,
 };
@@ -38,6 +39,7 @@ const fullWorldCard: WorldCard = {
     style: 'Friendly',
   },
   budget_draft: { per_action: 0.05, per_day: 10 },
+  llm_preset: null,
   current_proposal: 'Start with FAQ',
   version: 1,
 };
