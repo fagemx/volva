@@ -225,6 +225,62 @@ describe('CardManager.getDiffHistory', () => {
   });
 });
 
+// ─── Version History Tests ───
+
+describe('CardManager.getVersionHistory', () => {
+  it('returns all versions in order', () => {
+    const card = mgr.create('conv1', 'world', minimalWorldCard);
+    const { card: v2 } = mgr.update(card.id, { ...minimalWorldCard, goal: 'v2' });
+    mgr.update(v2.id, { ...minimalWorldCard, goal: 'v3' });
+
+    const history = mgr.getVersionHistory('conv1');
+    expect(history).toHaveLength(3);
+    expect(history[0].version).toBe(1);
+    expect(history[1].version).toBe(2);
+    expect(history[2].version).toBe(3);
+  });
+
+  it('returns empty array for unknown conversation', () => {
+    const history = mgr.getVersionHistory('unknown');
+    expect(history).toHaveLength(0);
+  });
+
+  it('does not include other conversations', () => {
+    mgr.create('conv1', 'world', minimalWorldCard);
+    mgr.create('conv2', 'world', minimalWorldCard);
+
+    const history = mgr.getVersionHistory('conv1');
+    expect(history).toHaveLength(1);
+  });
+});
+
+describe('CardManager.getVersion', () => {
+  it('returns specific version', () => {
+    const card = mgr.create('conv1', 'world', minimalWorldCard);
+    mgr.update(card.id, { ...minimalWorldCard, goal: 'v2 goal' });
+
+    const v1 = mgr.getVersion('conv1', 1);
+    const v2 = mgr.getVersion('conv1', 2);
+
+    expect(v1).not.toBeNull();
+    expect(v1!.version).toBe(1);
+    expect((v1!.content as WorldCard).goal).toBeNull();
+
+    expect(v2).not.toBeNull();
+    expect(v2!.version).toBe(2);
+    expect((v2!.content as WorldCard).goal).toBe('v2 goal');
+  });
+
+  it('returns null for nonexistent version', () => {
+    mgr.create('conv1', 'world', minimalWorldCard);
+    expect(mgr.getVersion('conv1', 99)).toBeNull();
+  });
+
+  it('returns null for unknown conversation', () => {
+    expect(mgr.getVersion('unknown', 1)).toBeNull();
+  });
+});
+
 // ─── Edge Cases ───
 
 describe('CardManager edge cases', () => {

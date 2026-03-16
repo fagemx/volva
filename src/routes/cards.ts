@@ -16,6 +16,21 @@ export function cardRoutes(deps: CardDeps): Hono {
     return ok(c, card);
   });
 
+  // GET /api/conversations/:id/card/history
+  app.get('/api/conversations/:id/card/history', (c) => {
+    const conversationId = c.req.param('id');
+    const history = deps.cardManager.getVersionHistory(conversationId);
+    return ok(c, history);
+  });
+
+  // GET /api/conversations/:id/card/version/:version
+  app.get('/api/conversations/:id/card/version/:version', (c) => {
+    const conversationId = c.req.param('id');
+    const version = parseInt(c.req.param('version'), 10);
+    const card = deps.cardManager.getVersion(conversationId, version);
+    return ok(c, card);
+  });
+
   // GET /api/conversations/:id/card/diffs
   app.get('/api/conversations/:id/card/diffs', (c) => {
     const conversationId = c.req.param('id');

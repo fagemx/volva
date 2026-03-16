@@ -180,6 +180,40 @@ export class CardManager {
     };
   }
 
+  getVersionHistory(conversationId: string): CardEnvelope[] {
+    const rows = this.db
+      .query('SELECT * FROM cards WHERE conversation_id = ? ORDER BY version ASC')
+      .all(conversationId) as Record<string, unknown>[];
+
+    return rows.map((row) => ({
+      id: row.id as string,
+      conversationId: row.conversation_id as string,
+      type: row.type as CardType,
+      content: JSON.parse(row.content as string) as AnyCard,
+      version: row.version as number,
+      createdAt: row.created_at as string,
+      updatedAt: row.updated_at as string,
+    }));
+  }
+
+  getVersion(conversationId: string, version: number): CardEnvelope | null {
+    const row = this.db
+      .query('SELECT * FROM cards WHERE conversation_id = ? AND version = ?')
+      .get(conversationId, version) as Record<string, unknown> | null;
+
+    if (!row) return null;
+
+    return {
+      id: row.id as string,
+      conversationId: row.conversation_id as string,
+      type: row.type as CardType,
+      content: JSON.parse(row.content as string) as AnyCard,
+      version: row.version as number,
+      createdAt: row.created_at as string,
+      updatedAt: row.updated_at as string,
+    };
+  }
+
   diff(oldContent: AnyCard, newContent: AnyCard): CardDiff {
     return computeDiff(
       oldContent as unknown as Record<string, unknown>,
