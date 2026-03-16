@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { classifySettlement } from './router';
-import type { WorldCard, WorkflowCard, TaskCard } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, PipelineCard } from '../schemas/card';
 
 const emptyWorldCard: WorldCard = {
   goal: null,
@@ -67,5 +67,40 @@ describe('classifySettlement', () => {
       version: 1,
     };
     expect(classifySettlement('task', card)).toBe('task');
+  });
+
+  it('PipelineCard with steps → pipeline', () => {
+    const card: PipelineCard = {
+      name: 'test',
+      steps: [{
+        order: 0,
+        type: 'skill',
+        label: 'step1',
+        skill_name: 'skill1',
+        instruction: null,
+        revision_target: null,
+        max_revision_cycles: null,
+        condition: null,
+        on_true: null,
+        on_false: null,
+      }],
+      schedule: null,
+      proposed_skills: [],
+      pending: [],
+      version: 1,
+    };
+    expect(classifySettlement('pipeline', card)).toBe('pipeline');
+  });
+
+  it('PipelineCard with empty steps → null', () => {
+    const card: PipelineCard = {
+      name: null,
+      steps: [],
+      schedule: null,
+      proposed_skills: [],
+      pending: [],
+      version: 1,
+    };
+    expect(classifySettlement('pipeline', card)).toBeNull();
   });
 });

@@ -4,7 +4,7 @@ import { parseIntent } from '../llm/intent-parser';
 import { generateReply } from '../llm/response-gen';
 import { checkTransition, type Phase } from './state-machine';
 import { pickStrategy } from './rhythm';
-import type { WorldCard, WorkflowCard, TaskCard, AnyCard, CardType, CardDiff } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AnyCard, CardType, CardDiff } from '../schemas/card';
 import type { Intent } from '../schemas/intent';
 import type { Strategy } from '../llm/prompts';
 import type { ConversationMode } from '../schemas/conversation';
@@ -63,6 +63,17 @@ export function createEmptyTaskCard(): TaskCard {
   };
 }
 
+export function createEmptyPipelineCard(): PipelineCard {
+  return {
+    name: null,
+    steps: [],
+    schedule: null,
+    proposed_skills: [],
+    pending: [],
+    version: 1,
+  };
+}
+
 // ─── Mode / CardType Mapping ───
 
 export function modeToCardType(mode: ConversationMode): CardType {
@@ -73,6 +84,8 @@ export function modeToCardType(mode: ConversationMode): CardType {
       return 'workflow';
     case 'task':
       return 'task';
+    case 'pipeline_design':
+      return 'pipeline';
   }
 }
 
@@ -84,6 +97,8 @@ export function createEmptyCard(mode: ConversationMode): AnyCard {
       return createEmptyWorkflowCard();
     case 'task':
       return createEmptyTaskCard();
+    case 'pipeline_design':
+      return createEmptyPipelineCard();
   }
 }
 
@@ -232,6 +247,96 @@ export function applyIntentToTaskCard(card: TaskCard, intent: Intent): TaskCard 
   return updated;
 }
 
+function makePipelineStep(
+  order: number,
+  type: 'skill' | 'gate' | 'branch',
+  label: string,
+  overrides?: Partial<PipelineCard['steps'][number]>,
+): PipelineCard['steps'][number] {
+  return {
+    order,
+    type,
+    label,
+    skill_name: null,
+    instruction: null,
+    revision_target: null,
+    max_revision_cycles: null,
+    condition: null,
+    on_true: null,
+    on_false: null,
+    ...overrides,
+  };
+}
+
+function applyPipelineBoundary(updated: PipelineCard, intent: Intent): void {
+  if (intent.enforcement === 'hard') {
+    updated.steps.push(
+      makePipelineStep(updated.steps.length, 'gate', intent.summary, { condition: intent.summary }),
+    );
+    return;
+  }
+  const targetStep = intent.entities?.target_step;
+  if (!targetStep) return;
+  for (const step of updated.steps) {
+    if (step.label.includes(targetStep)) {
+      step.revision_target = intent.summary;
+      step.max_revision_cycles = 3;
+      break;
+    }
+  }
+}
+
+function applyPipelineModify(updated: PipelineCard, intent: Intent): void {
+  if (!intent.entities?.remove_step) return;
+  const removeLabel = intent.entities.remove_step;
+  updated.steps = updated.steps.filter((s) => !s.label.includes(removeLabel));
+  for (let i = 0; i < updated.steps.length; i++) {
+    updated.steps[i].order = i;
+  }
+}
+
+export function applyIntentToPipelineCard(card: PipelineCard, intent: Intent): PipelineCard {
+  const updated = structuredClone(card);
+
+  switch (intent.type) {
+    case 'new_intent':
+      if (intent.summary) updated.name = intent.summary;
+      break;
+    case 'add_info':
+      if (intent.entities) {
+        for (const [, value] of Object.entries(intent.entities)) {
+          updated.steps.push(
+            makePipelineStep(updated.steps.length, 'skill', value, { skill_name: value }),
+          );
+        }
+      }
+      break;
+    case 'set_boundary':
+      applyPipelineBoundary(updated, intent);
+      break;
+    case 'add_constraint':
+      updated.steps.push(
+        makePipelineStep(updated.steps.length, 'branch', intent.summary, {
+          condition: intent.summary,
+          on_true: intent.entities?.on_true ?? null,
+          on_false: intent.entities?.on_false ?? null,
+        }),
+      );
+      break;
+    case 'modify':
+      applyPipelineModify(updated, intent);
+      break;
+    case 'confirm':
+    case 'settle_signal':
+    case 'question':
+    case 'off_topic':
+    case 'style_preference':
+      break;
+  }
+
+  return updated;
+}
+
 export function applyIntent(cardType: CardType, card: AnyCard, intent: Intent): AnyCard {
   switch (cardType) {
     case 'world':
@@ -240,6 +345,8 @@ export function applyIntent(cardType: CardType, card: AnyCard, intent: Intent): 
       return applyIntentToWorkflowCard(card as WorkflowCard, intent);
     case 'task':
       return applyIntentToTaskCard(card as TaskCard, intent);
+    case 'pipeline':
+      return applyIntentToPipelineCard(card as PipelineCard, intent);
   }
 }
 
@@ -253,6 +360,8 @@ function cardHasPending(cardType: CardType, card: AnyCard): boolean {
       return (card as WorkflowCard).pending.length > 0;
     case 'task':
       return false;
+    case 'pipeline':
+      return (card as PipelineCard).pending.length > 0;
   }
 }
 

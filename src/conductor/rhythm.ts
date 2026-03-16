@@ -12,6 +12,7 @@ export function pickStrategy(
   switch (phase) {
     case 'explore':
       if (mode === 'task' && intentType === 'confirm') return 'settle';
+      if (mode === 'pipeline_design' && intentType === 'add_info') return 'probe';
       if (intentType === 'new_intent') return 'mirror';
       if (intentType === 'set_boundary') return 'mirror';
       return 'probe';

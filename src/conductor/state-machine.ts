@@ -1,4 +1,4 @@
-import type { WorldCard, WorkflowCard, TaskCard, AnyCard, CardType } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AnyCard, CardType } from '../schemas/card';
 import type { IntentType } from '../schemas/intent';
 
 export type { IntentType } from '../schemas/intent';
@@ -149,6 +149,51 @@ function checkTaskTransition(
   return { newPhase: currentPhase, reason: null };
 }
 
+// ─── PipelineCard Transitions ───
+
+function checkPipelineTransition(
+  currentPhase: Phase,
+  card: PipelineCard,
+  intentType: IntentType,
+  consecutiveNoModTurns: number,
+): TransitionResult {
+  // EXPLORE -> FOCUS: at least 2 steps defined
+  if (currentPhase === 'explore') {
+    if (card.steps.length >= 2) {
+      return { newPhase: 'focus', reason: 'pipeline has >= 2 steps' };
+    }
+  }
+
+  // FOCUS -> SETTLE
+  if (currentPhase === 'focus') {
+    if (card.pending.length === 0 && intentType === 'confirm') {
+      return { newPhase: 'settle', reason: 'pending empty + user confirmed' };
+    }
+    if (intentType === 'settle_signal') {
+      return { newPhase: 'settle', reason: 'user explicit settle signal' };
+    }
+    if (consecutiveNoModTurns >= 2) {
+      return { newPhase: 'settle', reason: 'consecutive 2 turns with no modification' };
+    }
+  }
+
+  // SETTLE -> EXPLORE
+  if (currentPhase === 'settle') {
+    if (intentType === 'new_intent') {
+      return { newPhase: 'explore', reason: 'new topic after settlement' };
+    }
+  }
+
+  // FOCUS -> EXPLORE (rollback)
+  if (currentPhase === 'focus') {
+    if (intentType === 'new_intent') {
+      return { newPhase: 'explore', reason: 'major direction change' };
+    }
+  }
+
+  return { newPhase: currentPhase, reason: null };
+}
+
 // ─── Dispatcher ───
 
 export function checkTransition(
@@ -165,5 +210,7 @@ export function checkTransition(
       return checkWorkflowTransition(currentPhase, card as WorkflowCard, intentType, consecutiveNoModTurns);
     case 'task':
       return checkTaskTransition(currentPhase, card as TaskCard, intentType, consecutiveNoModTurns);
+    case 'pipeline':
+      return checkPipelineTransition(currentPhase, card as PipelineCard, intentType, consecutiveNoModTurns);
   }
 }
