@@ -12,6 +12,11 @@ const PendingItemSchema = z.object({
   context: z.string(),
 });
 
+// ─── LLM Preset ───
+
+export const LlmPresetEnum = z.enum(['economy', 'balanced', 'performance']);
+export type LlmPreset = z.infer<typeof LlmPresetEnum>;
+
 // ─── WorldCard ───
 
 export const RuleSchema = z.object({
@@ -44,6 +49,7 @@ export const WorldCardSchema = z.object({
       per_day: z.number().nullable(),
     })
     .nullable(),
+  llm_preset: LlmPresetEnum.nullable(),
   current_proposal: z.string().nullable(),
   version: VersionSchema,
 });

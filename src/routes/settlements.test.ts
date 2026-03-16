@@ -38,6 +38,7 @@ const WORLD_CARD_CONTENT: WorldCard = {
   pending: [],
   chief_draft: { name: 'Chief', role: 'leader', style: 'strict' },
   budget_draft: null,
+  llm_preset: null,
   current_proposal: null,
   version: 1,
 };

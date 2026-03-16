@@ -4,6 +4,7 @@ import {
   WorldCardSchema,
   WorkflowCardSchema,
   TaskCardSchema,
+  LlmPresetEnum,
 } from './card';
 
 // ─── CardType ───
@@ -17,6 +18,20 @@ describe('CardTypeEnum', () => {
 
   it('rejects invalid card type', () => {
     expect(() => CardTypeEnum.parse('invalid')).toThrow();
+  });
+});
+
+// ─── LlmPresetEnum ───
+
+describe('LlmPresetEnum', () => {
+  it('accepts valid presets', () => {
+    expect(LlmPresetEnum.parse('economy')).toBe('economy');
+    expect(LlmPresetEnum.parse('balanced')).toBe('balanced');
+    expect(LlmPresetEnum.parse('performance')).toBe('performance');
+  });
+
+  it('rejects invalid preset', () => {
+    expect(() => LlmPresetEnum.parse('turbo')).toThrow();
   });
 });
 
@@ -44,6 +59,7 @@ describe('WorldCardSchema', () => {
       per_action: 0.05,
       per_day: 10,
     },
+    llm_preset: 'balanced',
     current_proposal: 'Start with FAQ automation',
     version: 1,
   };
@@ -66,10 +82,28 @@ describe('WorldCardSchema', () => {
       pending: [],
       chief_draft: null,
       budget_draft: null,
+      llm_preset: null,
       current_proposal: null,
       version: 1,
     });
     expect(result.success).toBe(true);
+  });
+
+  it('accepts each llm_preset value', () => {
+    for (const preset of ['economy', 'balanced', 'performance'] as const) {
+      const result = WorldCardSchema.safeParse({ ...validWorldCard, llm_preset: preset });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('accepts llm_preset as null', () => {
+    const result = WorldCardSchema.safeParse({ ...validWorldCard, llm_preset: null });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid llm_preset value', () => {
+    const result = WorldCardSchema.safeParse({ ...validWorldCard, llm_preset: 'turbo' });
+    expect(result.success).toBe(false);
   });
 
   it('rejects missing required fields', () => {

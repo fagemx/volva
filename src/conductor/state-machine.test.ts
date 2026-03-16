@@ -22,6 +22,7 @@ function makeWorldCard(opts: {
     })),
     chief_draft: null,
     budget_draft: null,
+    llm_preset: null,
     current_proposal: null,
     version: 1,
   };

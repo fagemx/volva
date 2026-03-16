@@ -76,6 +76,39 @@ describe('applyIntentToCard', () => {
     expect(result.version).toBe(card.version);
   });
 
+  it('add_info with llm_preset entity sets llm_preset and not must_have', () => {
+    const card = createEmptyWorldCard();
+    const result = applyIntentToCard(card, {
+      type: 'add_info',
+      summary: '選擇 balanced',
+      entities: { llm_preset: 'balanced' },
+    });
+    expect(result.llm_preset).toBe('balanced');
+    expect(result.confirmed.must_have).toHaveLength(0);
+  });
+
+  it('add_info with llm_preset and other entities handles both correctly', () => {
+    const card = createEmptyWorldCard();
+    const result = applyIntentToCard(card, {
+      type: 'add_info',
+      summary: '設定',
+      entities: { llm_preset: 'economy', feature: 'auto-reply' },
+    });
+    expect(result.llm_preset).toBe('economy');
+    expect(result.confirmed.must_have).toEqual(['auto-reply']);
+  });
+
+  it('add_info with invalid llm_preset treats it as must_have', () => {
+    const card = createEmptyWorldCard();
+    const result = applyIntentToCard(card, {
+      type: 'add_info',
+      summary: '無效 preset',
+      entities: { llm_preset: 'turbo' },
+    });
+    expect(result.llm_preset).toBeNull();
+    expect(result.confirmed.must_have).toEqual(['turbo']);
+  });
+
   it('does not increment version (CardManager owns versioning)', () => {
     const card = createEmptyWorldCard();
     expect(card.version).toBe(1);
