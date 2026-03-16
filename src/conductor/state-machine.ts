@@ -1,4 +1,4 @@
-import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AnyCard, CardType } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AdapterCard, AnyCard, CardType } from '../schemas/card';
 import type { IntentType } from '../schemas/intent';
 
 export type { IntentType } from '../schemas/intent';
@@ -194,6 +194,49 @@ function checkPipelineTransition(
   return { newPhase: currentPhase, reason: null };
 }
 
+// ─── AdapterCard Transitions ───
+
+function checkAdapterTransition(
+  currentPhase: Phase,
+  card: AdapterCard,
+  intentType: IntentType,
+  consecutiveNoModTurns: number,
+): TransitionResult {
+  // EXPLORE -> FOCUS: at least 1 platform added
+  if (currentPhase === 'explore') {
+    if (card.platforms.length >= 1) {
+      return { newPhase: 'focus', reason: 'platform added' };
+    }
+  }
+
+  // FOCUS -> SETTLE
+  if (currentPhase === 'focus') {
+    const allHaveRoles = card.platforms.filter((p) => p.enabled).every((p) => p.role !== '');
+    if (allHaveRoles && (intentType === 'confirm' || intentType === 'settle_signal')) {
+      return { newPhase: 'settle', reason: 'all enabled platforms have roles + user confirmed' };
+    }
+    if (consecutiveNoModTurns >= 2) {
+      return { newPhase: 'settle', reason: 'consecutive 2 turns with no modification' };
+    }
+  }
+
+  // SETTLE -> EXPLORE
+  if (currentPhase === 'settle') {
+    if (intentType === 'new_intent') {
+      return { newPhase: 'explore', reason: 'new topic after settlement' };
+    }
+  }
+
+  // FOCUS -> EXPLORE (rollback)
+  if (currentPhase === 'focus') {
+    if (intentType === 'new_intent') {
+      return { newPhase: 'explore', reason: 'major direction change' };
+    }
+  }
+
+  return { newPhase: currentPhase, reason: null };
+}
+
 // ─── Dispatcher ───
 
 export function checkTransition(
@@ -212,5 +255,7 @@ export function checkTransition(
       return checkTaskTransition(currentPhase, card as TaskCard, intentType, consecutiveNoModTurns);
     case 'pipeline':
       return checkPipelineTransition(currentPhase, card as PipelineCard, intentType, consecutiveNoModTurns);
+    case 'adapter':
+      return checkAdapterTransition(currentPhase, card as AdapterCard, intentType, consecutiveNoModTurns);
   }
 }

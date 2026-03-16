@@ -9,7 +9,7 @@ export function createDb(path: string = ':memory:'): Database {
 export function initSchema(db: Database): void {
   db.run(`CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
-    mode TEXT NOT NULL CHECK(mode IN ('world_design','workflow_design','task','pipeline_design')),
+    mode TEXT NOT NULL CHECK(mode IN ('world_design','workflow_design','task','pipeline_design','adapter_config')),
     phase TEXT NOT NULL DEFAULT 'explore' CHECK(phase IN ('explore','focus','settle')),
     village_id TEXT,
     skills_json TEXT,
@@ -30,7 +30,7 @@ export function initSchema(db: Database): void {
   db.run(`CREATE TABLE IF NOT EXISTS cards (
     id TEXT PRIMARY KEY,
     conversation_id TEXT NOT NULL REFERENCES conversations(id),
-    type TEXT NOT NULL CHECK(type IN ('world','workflow','task','pipeline')),
+    type TEXT NOT NULL CHECK(type IN ('world','workflow','task','pipeline','adapter')),
     version INTEGER NOT NULL DEFAULT 1,
     content TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -50,7 +50,7 @@ export function initSchema(db: Database): void {
     id TEXT PRIMARY KEY,
     conversation_id TEXT NOT NULL REFERENCES conversations(id),
     card_id TEXT NOT NULL REFERENCES cards(id),
-    target TEXT NOT NULL CHECK(target IN ('village_pack','workflow','task','pipeline')),
+    target TEXT NOT NULL CHECK(target IN ('village_pack','workflow','task','pipeline','adapter_config')),
     payload TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','confirmed','applied','failed')),
     thyra_response TEXT,

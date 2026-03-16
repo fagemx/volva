@@ -9,6 +9,7 @@
     "src/conductor/turn-handler.ts",
     "src/conductor/state-machine.ts",
     "src/settlement/router.ts",
+    "src/settlement/adapter-config-builder.ts",
     "src/thyra-client/client.ts",
     "src/thyra-client/schemas.ts",
     "src/routes/*.ts"
