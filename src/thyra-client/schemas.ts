@@ -122,6 +122,12 @@ export type SkillData = z.infer<typeof SkillDataSchema>;
 
 export const PackApplyDataSchema = z.object({
   village_id: z.string(),
+  constitution_id: z.string(),
+  chief_id: z.string().nullable(),
+  skills: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+  })),
   applied: z.boolean(),
 });
 export type PackApplyData = z.infer<typeof PackApplyDataSchema>;

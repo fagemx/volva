@@ -63,7 +63,7 @@ async function runCli() {
               'UPDATE settlements SET status = ?, thyra_response = ? WHERE id = ?',
               ['applied', JSON.stringify(result), pendingSettlementId],
             );
-            settleReply = 'Village Pack applied successfully. ' + JSON.stringify(result);
+            settleReply = `Village Pack applied: village=${result.village_id}, constitution=${result.constitution_id}, chief=${result.chief_id ?? 'none'}, skills=${result.skills.length}`;
             console.log('\n' + settleReply);
           } catch (err) {
             // Transition: confirmed -> failed

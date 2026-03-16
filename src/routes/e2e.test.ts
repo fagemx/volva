@@ -598,8 +598,11 @@ describe('GP-2: Full W1 Scenario', () => {
 
     // Settlement: thyra mock
     (thyra.applyVillagePack as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      ok: true,
-      villageId: 'v-123',
+      village_id: 'v-123',
+      constitution_id: 'c-123',
+      chief_id: 'ch-123',
+      skills: [{ id: 's-1', name: 'deploy' }, { id: 's-2', name: 'monitor' }, { id: 's-3', name: 'alert' }],
+      applied: true,
     });
 
     // Create conversation
