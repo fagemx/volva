@@ -1,20 +1,24 @@
 import { Hono } from 'hono';
+import yaml from 'js-yaml';
 import type { Database } from 'bun:sqlite';
 import { ok, error } from './response';
 import type { CardManager } from '../cards/card-manager';
 import type { ThyraClient } from '../thyra-client/client';
+import type { KarviClient } from '../karvi-client/client';
 import { classifySettlement } from '../settlement/router';
 import { buildVillagePack } from '../settlement/village-pack-builder';
 import { buildWorkflowSpec } from '../settlement/workflow-spec-builder';
 import { buildTaskSpec } from '../settlement/task-spec-builder';
 import { buildCommerceSpec } from '../settlement/commerce-spec-builder';
 import { buildOrgHierarchy } from '../settlement/org-hierarchy-builder';
-import type { WorldCard, WorkflowCard, TaskCard, CommerceCard, OrgCard } from '../schemas/card';
+import { buildPipelineSpec } from '../settlement/pipeline-spec-builder';
+import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, CommerceCard, OrgCard } from '../schemas/card';
 
 export interface SettlementDeps {
   db: Database;
   cardManager: CardManager;
   thyra: ThyraClient;
+  karvi: KarviClient;
 }
 
 export function settlementRoutes(deps: SettlementDeps): Hono {
@@ -91,6 +95,16 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
       return ok(c, { id: settlementId, target, payload: yamlStr, status: 'draft' });
     }
 
+    if (target === 'pipeline') {
+      const yamlStr = buildPipelineSpec(card.content as PipelineCard);
+      const settlementId = crypto.randomUUID();
+      deps.db.run(
+        'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [settlementId, conversationId, card.id, target, yamlStr, 'draft'],
+      );
+      return ok(c, { id: settlementId, target, payload: yamlStr, status: 'draft' });
+    }
+
     // target === 'task'
     const json = buildTaskSpec(card.content as TaskCard);
     const settlementId = crypto.randomUUID();
@@ -118,6 +132,8 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
     const settlementId = settlement.id as string;
     const payload = settlement.payload as string;
 
+    const target = settlement.target as string;
+
     // Transition: draft -> confirmed
     deps.db.run(
       'UPDATE settlements SET status = ? WHERE id = ?',
@@ -125,13 +141,47 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
     );
 
     try {
-      const result = await deps.thyra.applyVillagePack(payload);
+      let result: unknown;
+
+      switch (target) {
+        case 'village_pack':
+          result = await deps.thyra.applyVillagePack(payload);
+          break;
+        case 'pipeline': {
+          const spec = yaml.load(payload) as {
+            pipeline: { name: string };
+            steps: Array<{
+              order: number;
+              type: string;
+              label: string;
+              skill_name: string | null;
+              instruction: string | null;
+            }>;
+          };
+          result = await deps.karvi.registerPipeline({
+            name: spec.pipeline.name,
+            steps: spec.steps.map((s) => ({
+              order: s.order,
+              type: s.type,
+              label: s.label,
+              skill_name: s.skill_name,
+              instruction: s.instruction,
+            })),
+          });
+          break;
+        }
+        default:
+          // workflow, task, adapter_config, market_init, org_hierarchy — not yet wired to external service
+          result = { applied: true };
+          break;
+      }
+
       // Transition: confirmed -> applied
       deps.db.run(
         'UPDATE settlements SET status = ?, thyra_response = ? WHERE id = ?',
         ['applied', JSON.stringify(result), settlementId],
       );
-      return ok(c, { id: settlementId, status: 'applied', thyra: result });
+      return ok(c, { id: settlementId, status: 'applied', result });
     } catch (err) {
       // Transition: confirmed -> failed
       deps.db.run(
@@ -141,7 +191,7 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
       return error(
         c,
         'UPSTREAM_ERROR',
-        err instanceof Error ? err.message : 'Thyra API failed',
+        err instanceof Error ? err.message : 'Upstream API failed',
         502,
       );
     }

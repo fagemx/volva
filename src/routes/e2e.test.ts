@@ -7,6 +7,7 @@ import { cardRoutes } from './cards';
 import { settlementRoutes } from './settlements';
 import type { LLMClient } from '../llm/client';
 import type { ThyraClient } from '../thyra-client/client';
+import type { KarviClient } from '../karvi-client/client';
 
 function createMockLlm() {
   return {
@@ -30,15 +31,25 @@ function createMockThyra() {
   } as unknown as ThyraClient;
 }
 
+function createMockKarvi() {
+  return {
+    registerPipeline: vi.fn(),
+    listPipelines: vi.fn(),
+    deletePipeline: vi.fn(),
+    getHealth: vi.fn(),
+  } as unknown as KarviClient;
+}
+
 function createTestApp(llm: LLMClient, thyra: ThyraClient) {
   const db = createDb(':memory:');
   initSchema(db);
   const cardManager = new CardManager(db);
+  const karvi = createMockKarvi();
 
   const app = new Hono();
   app.route('/', conversationRoutes({ db, llm, cardManager, thyra }));
   app.route('/', cardRoutes({ cardManager }));
-  app.route('/', settlementRoutes({ db, cardManager, thyra }));
+  app.route('/', settlementRoutes({ db, cardManager, thyra, karvi }));
 
   return { app, db, cardManager };
 }
