@@ -13,6 +13,7 @@
     "src/settlement/adapter-config-builder.ts",
     "src/settlement/commerce-spec-builder.ts",
     "src/settlement/org-hierarchy-builder.ts",
+    "src/settlement/pipeline-preview.ts",
     "src/thyra-client/client.ts",
     "src/thyra-client/schemas.ts",
     "src/karvi-client/client.ts",
