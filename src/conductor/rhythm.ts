@@ -14,6 +14,7 @@ export function pickStrategy(
       if (mode === 'task' && intentType === 'confirm') return 'settle';
       if (mode === 'pipeline_design' && intentType === 'add_info') return 'probe';
       if (mode === 'adapter_config' && intentType === 'add_info') return 'probe';
+      if (mode === 'commerce_design' && intentType === 'add_info') return 'probe';
       if (intentType === 'new_intent') return 'mirror';
       if (intentType === 'set_boundary') return 'mirror';
       return 'probe';
