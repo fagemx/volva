@@ -12,7 +12,8 @@ import { buildTaskSpec } from '../settlement/task-spec-builder';
 import { buildCommerceSpec } from '../settlement/commerce-spec-builder';
 import { buildOrgHierarchy } from '../settlement/org-hierarchy-builder';
 import { buildPipelineSpec } from '../settlement/pipeline-spec-builder';
-import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, CommerceCard, OrgCard } from '../schemas/card';
+import { buildAdapterConfig } from '../settlement/adapter-config-builder';
+import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AdapterCard, CommerceCard, OrgCard } from '../schemas/card';
 
 export interface SettlementDeps {
   db: Database;
@@ -105,6 +106,16 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
       return ok(c, { id: settlementId, target, payload: yamlStr, status: 'draft' });
     }
 
+    if (target === 'adapter_config') {
+      const json = buildAdapterConfig(card.content as AdapterCard);
+      const settlementId = crypto.randomUUID();
+      deps.db.run(
+        'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [settlementId, conversationId, card.id, target, json, 'draft'],
+      );
+      return ok(c, { id: settlementId, target, payload: json, status: 'draft' });
+    }
+
     // target === 'task'
     const json = buildTaskSpec(card.content as TaskCard);
     const settlementId = crypto.randomUUID();
@@ -170,9 +181,20 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
           });
           break;
         }
-        default:
-          // workflow, task, adapter_config, market_init, org_hierarchy — not yet wired to external service
-          result = { applied: true };
+        case 'workflow':
+          result = { applied: true, target: 'workflow', payload_size: payload.length };
+          break;
+        case 'task':
+          result = { applied: true, target: 'task', payload_size: payload.length };
+          break;
+        case 'adapter_config':
+          result = { applied: true, target: 'adapter_config', payload_size: payload.length };
+          break;
+        case 'market_init':
+          result = { applied: true, target: 'market_init', payload_size: payload.length };
+          break;
+        case 'org_hierarchy':
+          result = { applied: true, target: 'org_hierarchy', payload_size: payload.length };
           break;
       }
 

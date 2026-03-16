@@ -6,7 +6,7 @@ import { settlementRoutes } from './settlements';
 import type { Database } from 'bun:sqlite';
 import type { ThyraClient } from '../thyra-client/client';
 import type { KarviClient } from '../karvi-client/client';
-import type { WorldCard, PipelineCard } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AdapterCard, CommerceCard, OrgCard } from '../schemas/card';
 
 function createMockThyra() {
   return {
@@ -512,5 +512,357 @@ describe('Pipeline settlement lifecycle', () => {
       expect(row.status).toBe('applied');
       expect(row.thyra_response).not.toBeNull();
     });
+  });
+});
+
+// ─── Workflow Settlement ───
+
+const WORKFLOW_CARD_CONTENT: WorkflowCard = {
+  name: 'Deploy Flow',
+  purpose: 'Automate deployment',
+  steps: [
+    { order: 0, description: 'Build', skill: 'builder', conditions: null },
+    { order: 1, description: 'Test', skill: 'tester', conditions: 'build.success' },
+  ],
+  confirmed: {
+    triggers: ['push to main'],
+    exit_conditions: ['all tests pass'],
+    failure_handling: ['rollback'],
+  },
+  pending: [],
+  version: 1,
+};
+
+describe('Workflow settlement lifecycle', () => {
+  let app: Hono;
+  let db: Database;
+  let cardManager: CardManager;
+  let thyra: ReturnType<typeof createMockThyra>;
+  let karvi: ReturnType<typeof createMockKarvi>;
+  let conversationId: string;
+
+  beforeEach(() => {
+    db = createDb(':memory:');
+    initSchema(db);
+    cardManager = new CardManager(db);
+    thyra = createMockThyra();
+    karvi = createMockKarvi();
+    app = new Hono();
+    app.route('/', settlementRoutes({ db, cardManager, thyra, karvi }));
+
+    conversationId = crypto.randomUUID();
+    db.run(
+      "INSERT INTO conversations (id, mode, phase) VALUES (?, 'workflow_design', 'settle')",
+      [conversationId],
+    );
+    cardManager.create(conversationId, 'workflow', WORKFLOW_CARD_CONTENT);
+  });
+
+  it('creates draft with workflow target', async () => {
+    const res = await jsonPost(app, `/api/conversations/${conversationId}/settle`);
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    const data = json.data as Record<string, unknown>;
+    expect(data.target).toBe('workflow');
+    expect(data.status).toBe('draft');
+    expect(data.payload).toContain('Deploy Flow');
+  });
+
+  it('confirm applies workflow settlement', async () => {
+    await jsonPost(app, `/api/conversations/${conversationId}/settle`);
+    const res = await jsonPost(app, `/api/conversations/${conversationId}/settle/confirm`);
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    const data = json.data as Record<string, unknown>;
+    expect(data.status).toBe('applied');
+
+    const result = data.result as Record<string, unknown>;
+    expect(result.applied).toBe(true);
+    expect(result.target).toBe('workflow');
+  });
+});
+
+// ─── Task Settlement ───
+
+const TASK_CARD_CONTENT: TaskCard = {
+  intent: 'Generate weekly report',
+  inputs: { source: 'analytics_db', format: 'pdf' },
+  constraints: ['under 5 pages', 'include graphs'],
+  success_condition: 'PDF generated and sent',
+  version: 1,
+};
+
+describe('Task settlement lifecycle', () => {
+  let app: Hono;
+  let db: Database;
+  let cardManager: CardManager;
+  let thyra: ReturnType<typeof createMockThyra>;
+  let karvi: ReturnType<typeof createMockKarvi>;
+  let conversationId: string;
+
+  beforeEach(() => {
+    db = createDb(':memory:');
+    initSchema(db);
+    cardManager = new CardManager(db);
+    thyra = createMockThyra();
+    karvi = createMockKarvi();
+    app = new Hono();
+    app.route('/', settlementRoutes({ db, cardManager, thyra, karvi }));
+
+    conversationId = crypto.randomUUID();
+    db.run(
+      "INSERT INTO conversations (id, mode, phase) VALUES (?, 'task', 'settle')",
+      [conversationId],
+    );
+    cardManager.create(conversationId, 'task', TASK_CARD_CONTENT);
+  });
+
+  it('creates draft with task target', async () => {
+    const res = await jsonPost(app, `/api/conversations/${conversationId}/settle`);
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    const data = json.data as Record<string, unknown>;
+    expect(data.target).toBe('task');
+    expect(data.status).toBe('draft');
+    expect(data.payload).toContain('weekly report');
+  });
+
+  it('confirm applies task settlement', async () => {
+    await jsonPost(app, `/api/conversations/${conversationId}/settle`);
+    const res = await jsonPost(app, `/api/conversations/${conversationId}/settle/confirm`);
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    const data = json.data as Record<string, unknown>;
+    expect(data.status).toBe('applied');
+
+    const result = data.result as Record<string, unknown>;
+    expect(result.applied).toBe(true);
+    expect(result.target).toBe('task');
+  });
+});
+
+// ─── Adapter Settlement ───
+
+const ADAPTER_CARD_CONTENT: AdapterCard = {
+  platforms: [
+    { platform: 'discord', enabled: true, role: 'community manager' },
+    { platform: 'telegram', enabled: false, role: 'notifier' },
+  ],
+  version: 1,
+};
+
+describe('Adapter settlement lifecycle', () => {
+  let app: Hono;
+  let db: Database;
+  let cardManager: CardManager;
+  let thyra: ReturnType<typeof createMockThyra>;
+  let karvi: ReturnType<typeof createMockKarvi>;
+  let conversationId: string;
+
+  beforeEach(() => {
+    db = createDb(':memory:');
+    initSchema(db);
+    cardManager = new CardManager(db);
+    thyra = createMockThyra();
+    karvi = createMockKarvi();
+    app = new Hono();
+    app.route('/', settlementRoutes({ db, cardManager, thyra, karvi }));
+
+    conversationId = crypto.randomUUID();
+    db.run(
+      "INSERT INTO conversations (id, mode, phase) VALUES (?, 'adapter_config', 'settle')",
+      [conversationId],
+    );
+    cardManager.create(conversationId, 'adapter', ADAPTER_CARD_CONTENT);
+  });
+
+  it('creates draft with adapter_config target', async () => {
+    const res = await jsonPost(app, `/api/conversations/${conversationId}/settle`);
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    const data = json.data as Record<string, unknown>;
+    expect(data.target).toBe('adapter_config');
+    expect(data.status).toBe('draft');
+    expect(data.payload).toContain('discord');
+  });
+
+  it('confirm applies adapter_config settlement', async () => {
+    await jsonPost(app, `/api/conversations/${conversationId}/settle`);
+    const res = await jsonPost(app, `/api/conversations/${conversationId}/settle/confirm`);
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    const data = json.data as Record<string, unknown>;
+    expect(data.status).toBe('applied');
+
+    const result = data.result as Record<string, unknown>;
+    expect(result.applied).toBe(true);
+    expect(result.target).toBe('adapter_config');
+  });
+
+  it('returns no_settlement_target when no platform is enabled', async () => {
+    const noEnabledConvId = crypto.randomUUID();
+    db.run(
+      "INSERT INTO conversations (id, mode, phase) VALUES (?, 'adapter_config', 'settle')",
+      [noEnabledConvId],
+    );
+    const disabledAdapter: AdapterCard = {
+      platforms: [
+        { platform: 'discord', enabled: false, role: 'idle' },
+      ],
+      version: 1,
+    };
+    cardManager.create(noEnabledConvId, 'adapter', disabledAdapter);
+
+    const res = await jsonPost(app, `/api/conversations/${noEnabledConvId}/settle`);
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    const data = json.data as Record<string, unknown>;
+    expect(data.target).toBeNull();
+    expect(data.status).toBe('no_settlement_target');
+  });
+});
+
+// ─── Commerce Settlement ───
+
+const COMMERCE_CARD_CONTENT: CommerceCard = {
+  offerings: [
+    {
+      type: 'stall_slot',
+      name: 'Basic Stall',
+      description: 'A basic marketplace stall',
+      base_price: 100,
+      capacity: 10,
+      duration: '30d',
+    },
+  ],
+  pricing_rules: [
+    { name: 'Early bird', condition: 'days_before > 7', adjustment_pct: -10 },
+  ],
+  pending: [],
+  version: 1,
+};
+
+describe('Commerce settlement lifecycle', () => {
+  let app: Hono;
+  let db: Database;
+  let cardManager: CardManager;
+  let thyra: ReturnType<typeof createMockThyra>;
+  let karvi: ReturnType<typeof createMockKarvi>;
+  let conversationId: string;
+
+  beforeEach(() => {
+    db = createDb(':memory:');
+    initSchema(db);
+    cardManager = new CardManager(db);
+    thyra = createMockThyra();
+    karvi = createMockKarvi();
+    app = new Hono();
+    app.route('/', settlementRoutes({ db, cardManager, thyra, karvi }));
+
+    conversationId = crypto.randomUUID();
+    db.run(
+      "INSERT INTO conversations (id, mode, phase) VALUES (?, 'commerce_design', 'settle')",
+      [conversationId],
+    );
+    cardManager.create(conversationId, 'commerce', COMMERCE_CARD_CONTENT);
+  });
+
+  it('creates draft with market_init target', async () => {
+    const res = await jsonPost(app, `/api/conversations/${conversationId}/settle`);
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    const data = json.data as Record<string, unknown>;
+    expect(data.target).toBe('market_init');
+    expect(data.status).toBe('draft');
+    expect(data.payload).toContain('Basic Stall');
+  });
+
+  it('confirm applies market_init settlement', async () => {
+    await jsonPost(app, `/api/conversations/${conversationId}/settle`);
+    const res = await jsonPost(app, `/api/conversations/${conversationId}/settle/confirm`);
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    const data = json.data as Record<string, unknown>;
+    expect(data.status).toBe('applied');
+
+    const result = data.result as Record<string, unknown>;
+    expect(result.applied).toBe(true);
+    expect(result.target).toBe('market_init');
+  });
+});
+
+// ─── Org Settlement ───
+
+const ORG_CARD_CONTENT: OrgCard = {
+  director: { name: 'Director Alpha', role: 'overseer', style: 'collaborative' },
+  departments: [
+    { name: 'Engineering', chief: 'Chief Eng', workers: ['dev1', 'dev2'], pipeline_refs: ['build-pipe'] },
+  ],
+  governance: {
+    cycle: 'weekly',
+    chief_order: ['Chief Eng'],
+    escalation: 'Director Alpha',
+  },
+  pending: [],
+  version: 1,
+};
+
+describe('Org settlement lifecycle', () => {
+  let app: Hono;
+  let db: Database;
+  let cardManager: CardManager;
+  let thyra: ReturnType<typeof createMockThyra>;
+  let karvi: ReturnType<typeof createMockKarvi>;
+  let conversationId: string;
+
+  beforeEach(() => {
+    db = createDb(':memory:');
+    initSchema(db);
+    cardManager = new CardManager(db);
+    thyra = createMockThyra();
+    karvi = createMockKarvi();
+    app = new Hono();
+    app.route('/', settlementRoutes({ db, cardManager, thyra, karvi }));
+
+    conversationId = crypto.randomUUID();
+    db.run(
+      "INSERT INTO conversations (id, mode, phase) VALUES (?, 'org_design', 'settle')",
+      [conversationId],
+    );
+    cardManager.create(conversationId, 'org', ORG_CARD_CONTENT);
+  });
+
+  it('creates draft with org_hierarchy target', async () => {
+    const res = await jsonPost(app, `/api/conversations/${conversationId}/settle`);
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    const data = json.data as Record<string, unknown>;
+    expect(data.target).toBe('org_hierarchy');
+    expect(data.status).toBe('draft');
+    expect(data.payload).toContain('Engineering');
+  });
+
+  it('confirm applies org_hierarchy settlement', async () => {
+    await jsonPost(app, `/api/conversations/${conversationId}/settle`);
+    const res = await jsonPost(app, `/api/conversations/${conversationId}/settle/confirm`);
+    const json = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    const data = json.data as Record<string, unknown>;
+    expect(data.status).toBe('applied');
+
+    const result = data.result as Record<string, unknown>;
+    expect(result.applied).toBe(true);
+    expect(result.target).toBe('org_hierarchy');
   });
 });
