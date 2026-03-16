@@ -377,12 +377,40 @@ function applyPipelineBoundary(updated: PipelineCard, intent: Intent): void {
   }
 }
 
+function applyPipelineModifySkill(updated: PipelineCard, intent: Intent): boolean {
+  if (!intent.entities?.target_skill) return false;
+  const targetSkill = intent.entities.target_skill;
+  for (const skill of updated.proposed_skills) {
+    if (skill.name === targetSkill) {
+      skill.description = intent.summary;
+      return true;
+    }
+  }
+  return false;
+}
+
 function applyPipelineModify(updated: PipelineCard, intent: Intent): void {
+  if (applyPipelineModifySkill(updated, intent)) return;
   if (!intent.entities?.remove_step) return;
   const removeLabel = intent.entities.remove_step;
   updated.steps = updated.steps.filter((s) => !s.label.includes(removeLabel));
   for (let i = 0; i < updated.steps.length; i++) {
     updated.steps[i].order = i;
+  }
+}
+
+function autoPopulateProposedSkills(updated: PipelineCard): void {
+  for (const step of updated.steps) {
+    if (step.type === 'skill' && step.skill_name) {
+      const exists = updated.proposed_skills.some((s) => s.name === step.skill_name);
+      if (!exists) {
+        updated.proposed_skills.push({
+          name: step.skill_name,
+          type: 'skill',
+          description: step.label || step.skill_name,
+        });
+      }
+    }
   }
 }
 
@@ -401,6 +429,7 @@ export function applyIntentToPipelineCard(card: PipelineCard, intent: Intent): P
           );
         }
       }
+      autoPopulateProposedSkills(updated);
       break;
     case 'set_boundary':
       applyPipelineBoundary(updated, intent);

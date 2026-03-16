@@ -61,10 +61,31 @@ function buildLlmPresetHint(strategy: Strategy, cardSnapshot: string): string {
   return '';
 }
 
+export function formatSkillPreview(cardSnapshot: string): string {
+  try {
+    const card = JSON.parse(cardSnapshot) as Record<string, unknown>;
+    const skills = card.proposed_skills as Array<{ name: string; type: string; description: string }> | undefined;
+    if (!skills || skills.length === 0) return '';
+
+    const MAX_PREVIEW = 5;
+    const displayed = skills.slice(0, MAX_PREVIEW);
+    const lines = displayed.map((s, i) => `${i + 1}. **${s.name}** (${s.type})：${s.description}`);
+    let block = `\n\n📋 提議技能預覽：\n${lines.join('\n')}`;
+    if (skills.length > MAX_PREVIEW) {
+      block += `\n...以及其他 ${skills.length - MAX_PREVIEW} 個技能`;
+    }
+    return block;
+  } catch {
+    return '';
+  }
+}
+
 export function buildReplyPrompt(strategy: Strategy, cardSnapshot: string, availableSkills?: SkillData[]): string {
   const skillsSection = availableSkills && availableSkills.length > 0
     ? formatSkillsSection(availableSkills)
     : '';
+
+  const skillPreview = formatSkillPreview(cardSnapshot);
 
   return `你是 Völva，一個友善的對話導演。你的任務是引導使用者逐步收斂想法。
 
@@ -79,12 +100,13 @@ export function buildReplyPrompt(strategy: Strategy, cardSnapshot: string, avail
 - redirect：溫和地引導回主題
 
 當前短卡狀態：
-${cardSnapshot}${skillsSection}
+${cardSnapshot}${skillsSection}${skillPreview}
 
 重要規則：
 - 用繁體中文回覆
 - 語氣親切自然，不要太正式
 - 不要一次問太多問題（最多 1 個）
 - 不要主動提到「短卡」「schema」「Village Pack」等技術術語
-- 簡短回覆，不超過 3 句話${buildLlmPresetHint(strategy, cardSnapshot)}`;
+- 簡短回覆，不超過 3 句話
+- 如果有提議技能預覽，可以在適當時引用技能名稱，但不要逐一列舉${buildLlmPresetHint(strategy, cardSnapshot)}`;
 }
