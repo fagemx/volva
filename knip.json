@@ -13,6 +13,8 @@
     "src/settlement/commerce-spec-builder.ts",
     "src/thyra-client/client.ts",
     "src/thyra-client/schemas.ts",
+    "src/karvi-client/client.ts",
+    "src/karvi-client/schemas.ts",
     "src/routes/*.ts"
   ],
   "project": [
