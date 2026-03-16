@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // ─── Shared Sub-schemas ───
 
-export const CardTypeEnum = z.enum(['world', 'workflow', 'task']);
+export const CardTypeEnum = z.enum(['world', 'workflow', 'task', 'pipeline']);
 export type CardType = z.infer<typeof CardTypeEnum>;
 
 const VersionSchema = z.number().int().min(1);
@@ -86,9 +86,41 @@ export const TaskCardSchema = z.object({
 
 export type TaskCard = z.infer<typeof TaskCardSchema>;
 
+// ─── PipelineCard ───
+
+const PipelineStepSchema = z.object({
+  order: z.number().int().min(0),
+  type: z.enum(['skill', 'gate', 'branch']),
+  label: z.string(),
+  skill_name: z.string().nullable(),
+  instruction: z.string().nullable(),
+  revision_target: z.string().nullable(),
+  max_revision_cycles: z.number().int().nullable(),
+  condition: z.string().nullable(),
+  on_true: z.string().nullable(),
+  on_false: z.string().nullable(),
+});
+
+export const ProposedSkillSchema = z.object({
+  name: z.string(),
+  type: z.string(),
+  description: z.string(),
+});
+
+export const PipelineCardSchema = z.object({
+  name: z.string().nullable(),
+  steps: z.array(PipelineStepSchema),
+  schedule: z.string().nullable(),
+  proposed_skills: z.array(ProposedSkillSchema),
+  pending: z.array(PendingItemSchema),
+  version: VersionSchema,
+});
+
+export type PipelineCard = z.infer<typeof PipelineCardSchema>;
+
 // ─── Union type for downstream consumers ───
 
-export type AnyCard = WorldCard | WorkflowCard | TaskCard;
+export type AnyCard = WorldCard | WorkflowCard | TaskCard | PipelineCard;
 
 // ─── Card Diff ───
 

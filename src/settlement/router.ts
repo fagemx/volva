@@ -1,4 +1,4 @@
-import type { CardType, AnyCard, WorldCard, WorkflowCard } from '../schemas/card';
+import type { CardType, AnyCard, WorldCard, WorkflowCard, PipelineCard } from '../schemas/card';
 import type { SettlementTarget } from '../schemas/settlement';
 
 export function classifySettlement(
@@ -22,6 +22,13 @@ export function classifySettlement(
     }
     case 'task':
       return 'task';
+    case 'pipeline': {
+      const pipelineCard = card as PipelineCard;
+      if (pipelineCard.steps.length > 0) {
+        return 'pipeline';
+      }
+      return null;
+    }
     default: {
       const exhaustiveCheck: never = cardType;
       throw new Error(`Unknown card type: ${String(exhaustiveCheck)}`);
