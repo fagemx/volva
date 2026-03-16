@@ -8,7 +8,8 @@ import { buildVillagePack } from '../settlement/village-pack-builder';
 import { buildWorkflowSpec } from '../settlement/workflow-spec-builder';
 import { buildTaskSpec } from '../settlement/task-spec-builder';
 import { buildCommerceSpec } from '../settlement/commerce-spec-builder';
-import type { WorldCard, WorkflowCard, TaskCard, CommerceCard } from '../schemas/card';
+import { buildOrgHierarchy } from '../settlement/org-hierarchy-builder';
+import type { WorldCard, WorkflowCard, TaskCard, CommerceCard, OrgCard } from '../schemas/card';
 
 export interface SettlementDeps {
   db: Database;
@@ -78,6 +79,16 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
         [settlementId, conversationId, card.id, target, json, 'draft'],
       );
       return ok(c, { id: settlementId, target, payload: json, status: 'draft' });
+    }
+
+    if (target === 'org_hierarchy') {
+      const yamlStr = buildOrgHierarchy(card.content as OrgCard);
+      const settlementId = crypto.randomUUID();
+      deps.db.run(
+        'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [settlementId, conversationId, card.id, target, yamlStr, 'draft'],
+      );
+      return ok(c, { id: settlementId, target, payload: yamlStr, status: 'draft' });
     }
 
     // target === 'task'

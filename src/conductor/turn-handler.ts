@@ -4,7 +4,7 @@ import { parseIntent } from '../llm/intent-parser';
 import { generateReply } from '../llm/response-gen';
 import { checkTransition, type Phase } from './state-machine';
 import { pickStrategy } from './rhythm';
-import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AdapterCard, CommerceCard, AnyCard, CardType, CardDiff } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AdapterCard, CommerceCard, OrgCard, AnyCard, CardType, CardDiff } from '../schemas/card';
 import { LlmPresetEnum, PlatformEnum, OfferingTypeEnum } from '../schemas/card';
 import type { Intent } from '../schemas/intent';
 import type { Strategy } from '../llm/prompts';
@@ -92,6 +92,16 @@ export function createEmptyCommerceCard(): CommerceCard {
   };
 }
 
+export function createEmptyOrgCard(): OrgCard {
+  return {
+    director: null,
+    departments: [],
+    governance: { cycle: null, chief_order: [], escalation: null },
+    pending: [],
+    version: 1,
+  };
+}
+
 // ─── Mode / CardType Mapping ───
 
 export function modeToCardType(mode: ConversationMode): CardType {
@@ -108,6 +118,8 @@ export function modeToCardType(mode: ConversationMode): CardType {
       return 'adapter';
     case 'commerce_design':
       return 'commerce';
+    case 'org_design':
+      return 'org';
   }
 }
 
@@ -125,6 +137,8 @@ export function createEmptyCard(mode: ConversationMode): AnyCard {
       return createEmptyAdapterCard();
     case 'commerce_design':
       return createEmptyCommerceCard();
+    case 'org_design':
+      return createEmptyOrgCard();
   }
 }
 
@@ -535,6 +549,85 @@ export function applyIntentToCommerceCard(card: CommerceCard, intent: Intent): C
   return updated;
 }
 
+function applyOrgNewIntent(updated: OrgCard, summary: string): void {
+  if (!updated.director) {
+    updated.director = { name: null, role: null, style: null };
+  }
+  updated.director.name = summary;
+  updated.director.role = summary;
+}
+
+function applyOrgAddInfo(updated: OrgCard, entities: Record<string, string>): void {
+  for (const [key, value] of Object.entries(entities)) {
+    const existing = updated.departments.find((d) => d.name === key);
+    if (existing) {
+      if (!existing.workers.includes(value)) {
+        existing.workers.push(value);
+      }
+    } else {
+      updated.departments.push({ name: key, chief: null, workers: [value], pipeline_refs: [] });
+    }
+  }
+}
+
+function applyOrgBoundary(updated: OrgCard, intent: Intent): void {
+  if (intent.enforcement === 'hard') {
+    updated.governance.cycle = intent.summary;
+    if (intent.entities?.chief_order) {
+      updated.governance.chief_order.push(intent.entities.chief_order);
+    }
+  } else {
+    updated.governance.escalation = intent.summary;
+  }
+}
+
+function applyOrgModify(updated: OrgCard, intent: Intent): void {
+  const target = intent.entities?.target_department;
+  if (!target) return;
+  for (const dept of updated.departments) {
+    if (dept.name.includes(target)) {
+      dept.chief = intent.summary;
+      return;
+    }
+  }
+}
+
+export function applyIntentToOrgCard(card: OrgCard, intent: Intent): OrgCard {
+  const updated = structuredClone(card);
+
+  switch (intent.type) {
+    case 'new_intent':
+      applyOrgNewIntent(updated, intent.summary);
+      break;
+    case 'add_info':
+      if (intent.entities) applyOrgAddInfo(updated, intent.entities);
+      break;
+    case 'set_boundary':
+      applyOrgBoundary(updated, intent);
+      break;
+    case 'add_constraint':
+      updated.governance.chief_order.push(intent.summary);
+      break;
+    case 'style_preference':
+      if (!updated.director) {
+        updated.director = { name: null, role: null, style: null };
+      }
+      updated.director.style = intent.summary;
+      break;
+    case 'modify':
+      applyOrgModify(updated, intent);
+      break;
+    case 'add_evaluator_rule':
+    case 'confirm':
+    case 'settle_signal':
+    case 'question':
+    case 'off_topic':
+      break;
+  }
+
+  return updated;
+}
+
 export function applyIntent(cardType: CardType, card: AnyCard, intent: Intent): AnyCard {
   switch (cardType) {
     case 'world':
@@ -549,6 +642,8 @@ export function applyIntent(cardType: CardType, card: AnyCard, intent: Intent): 
       return applyIntentToAdapterCard(card as AdapterCard, intent);
     case 'commerce':
       return applyIntentToCommerceCard(card as CommerceCard, intent);
+    case 'org':
+      return applyIntentToOrgCard(card as OrgCard, intent);
   }
 }
 
@@ -568,6 +663,8 @@ function cardHasPending(cardType: CardType, card: AnyCard): boolean {
       return false;
     case 'commerce':
       return (card as CommerceCard).pending.length > 0;
+    case 'org':
+      return (card as OrgCard).pending.length > 0;
   }
 }
 

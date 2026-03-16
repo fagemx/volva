@@ -22,7 +22,8 @@
       "Bash(netstat *)",
       "Bash(taskkill *)",
       "Bash(git add:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(for i:*)"
     ]
   }
 }
