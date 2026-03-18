@@ -11,7 +11,7 @@
 
 ```bash
 cat src/skills/registry.ts                   # B1 output — SkillRegistry + SkillLookup
-cat docs/deepskill/container-routing-v0.md   # Section 4 Gate 4, Section 8 Registry Dependency
+cat docs/deepskill/container-routing-v0.md   # Section 4 Gate 4, Section 9 Registry Dependency
 cat docs/deepskill/skill-object-v0.md        # routing section — triggerWhen/doNotTriggerWhen/priority
 bun run build
 ```

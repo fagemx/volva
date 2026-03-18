@@ -171,5 +171,5 @@ src/
 | **Karvi dispatch overlay** | `four-plane-ownership-v0.md` Section 6 | v0 所有 skill 都是 `dispatch.mode: local` |
 | **Thyra runtime overlay** | `four-plane-ownership-v0.md` Section 6 | v0 不做 runtime constraint enforcement |
 | **Edda event recording** | `four-plane-ownership-v0.md` Section 6 | v0 用 local DB；Edda event API 尚未實作 |
-| **Semantic trigger matching** | `container-routing-v0.md` Section 8 | v0 用 keyword matching，不用 embedding/LLM |
+| **Semantic trigger matching** | `container-routing-v0.md` Section 9 | v0 用 keyword matching，不用 embedding/LLM |
 | **Feature flag for legacy→container migration** | — | v0 新舊 API 並存，不強制遷移 |

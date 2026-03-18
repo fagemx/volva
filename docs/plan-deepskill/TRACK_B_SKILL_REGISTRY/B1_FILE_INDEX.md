@@ -12,7 +12,7 @@
 ```bash
 cat src/schemas/skill-object.ts              # SkillObject 型別
 cat src/skills/yaml-parser.ts                # parseSkillYamlFile
-cat docs/deepskill/container-routing-v0.md   # Section 8 — registry 需求
+cat docs/deepskill/container-routing-v0.md   # Section 9 — registry 需求
 cat docs/plan-deepskill/CONTRACT.md          # LAYER-01
 bun run build
 ```
