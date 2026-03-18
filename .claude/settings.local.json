@@ -22,6 +22,7 @@
       "Bash(netstat *)",
       "Bash(taskkill *)",
       "Bash(git add:*)",
+      "Bash(bun run:*)",
       "Bash(cd:*)",
       "Bash(for i:*)",
       "Bash(xargs grep:*)"
