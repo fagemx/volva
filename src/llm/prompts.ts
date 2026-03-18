@@ -61,7 +61,7 @@ function buildLlmPresetHint(strategy: Strategy, cardSnapshot: string): string {
   return '';
 }
 
-export function formatSkillPreview(cardSnapshot: string): string {
+function formatSkillPreview(cardSnapshot: string): string {
   try {
     const card = JSON.parse(cardSnapshot) as Record<string, unknown>;
     const skills = card.proposed_skills as Array<{ name: string; type: string; description: string }> | undefined;
