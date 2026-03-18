@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // ─── Shared Sub-schemas ───
 
-export const CardTypeEnum = z.enum(['world', 'workflow', 'task']);
+export const CardTypeEnum = z.enum(['world', 'workflow', 'task', 'pipeline', 'adapter', 'commerce', 'org']);
 export type CardType = z.infer<typeof CardTypeEnum>;
 
 const VersionSchema = z.number().int().min(1);
@@ -12,15 +12,41 @@ const PendingItemSchema = z.object({
   context: z.string(),
 });
 
+// ─── LLM Preset ───
+
+export const LlmPresetEnum = z.enum(['economy', 'balanced', 'performance']);
+export type LlmPreset = z.infer<typeof LlmPresetEnum>;
+
 // ─── WorldCard ───
+
+export const RuleSchema = z.object({
+  description: z.string(),
+  scope: z.array(z.string()).default(['*']),
+});
+
+export type Rule = z.infer<typeof RuleSchema>;
+
+export const EvaluatorRuleSchema = z.object({
+  name: z.string(),
+  trigger: z.string(),
+  condition: z.string(),
+  on_fail: z.object({
+    risk: z.enum(['low', 'medium', 'high']),
+    action: z.enum(['warn', 'require_human_approval', 'reject']),
+  }),
+});
+
+export type EvaluatorRule = z.infer<typeof EvaluatorRuleSchema>;
 
 export const WorldCardSchema = z.object({
   goal: z.string().nullable(),
+  target_repo: z.string().nullable(),
   confirmed: z.object({
-    hard_rules: z.array(z.string()),
-    soft_rules: z.array(z.string()),
+    hard_rules: z.array(RuleSchema),
+    soft_rules: z.array(RuleSchema),
     must_have: z.array(z.string()),
     success_criteria: z.array(z.string()),
+    evaluator_rules: z.array(EvaluatorRuleSchema),
   }),
   pending: z.array(PendingItemSchema),
   chief_draft: z
@@ -36,6 +62,7 @@ export const WorldCardSchema = z.object({
       per_day: z.number().nullable(),
     })
     .nullable(),
+  llm_preset: LlmPresetEnum.nullable(),
   current_proposal: z.string().nullable(),
   version: VersionSchema,
 });
@@ -78,9 +105,115 @@ export const TaskCardSchema = z.object({
 
 export type TaskCard = z.infer<typeof TaskCardSchema>;
 
+// ─── PipelineCard ───
+
+const PipelineStepSchema = z.object({
+  order: z.number().int().min(0),
+  type: z.enum(['skill', 'gate', 'branch']),
+  label: z.string(),
+  skill_name: z.string().nullable(),
+  instruction: z.string().nullable(),
+  revision_target: z.string().nullable(),
+  max_revision_cycles: z.number().int().nullable(),
+  condition: z.string().nullable(),
+  on_true: z.string().nullable(),
+  on_false: z.string().nullable(),
+});
+
+export const ProposedSkillSchema = z.object({
+  name: z.string(),
+  type: z.string(),
+  description: z.string(),
+});
+
+export const PipelineCardSchema = z.object({
+  name: z.string().nullable(),
+  steps: z.array(PipelineStepSchema),
+  schedule: z.string().nullable(),
+  proposed_skills: z.array(ProposedSkillSchema),
+  pending: z.array(PendingItemSchema),
+  version: VersionSchema,
+});
+
+export type PipelineCard = z.infer<typeof PipelineCardSchema>;
+
+// ─── AdapterCard ───
+
+export const PlatformEnum = z.enum(['x', 'discord', 'telegram', 'owned_page']);
+export type Platform = z.infer<typeof PlatformEnum>;
+
+const PlatformConfigSchema = z.object({
+  platform: PlatformEnum,
+  enabled: z.boolean(),
+  role: z.string(),
+});
+
+export const AdapterCardSchema = z.object({
+  platforms: z.array(PlatformConfigSchema),
+  version: VersionSchema,
+});
+
+export type AdapterCard = z.infer<typeof AdapterCardSchema>;
+
+// ─── CommerceCard ───
+
+export const OfferingTypeEnum = z.enum(['stall_slot', 'event_ticket', 'commission', 'membership']);
+export type OfferingType = z.infer<typeof OfferingTypeEnum>;
+
+const OfferingSchema = z.object({
+  type: OfferingTypeEnum,
+  name: z.string(),
+  description: z.string(),
+  base_price: z.number().nullable(),
+  capacity: z.number().int().nullable(),
+  duration: z.string().nullable(),
+});
+
+const PricingRuleSchema = z.object({
+  name: z.string(),
+  condition: z.string(),
+  adjustment_pct: z.number(),
+});
+
+export const CommerceCardSchema = z.object({
+  offerings: z.array(OfferingSchema),
+  pricing_rules: z.array(PricingRuleSchema),
+  pending: z.array(PendingItemSchema),
+  version: VersionSchema,
+});
+
+export type CommerceCard = z.infer<typeof CommerceCardSchema>;
+
+// ─── OrgCard ───
+
+const DepartmentSchema = z.object({
+  name: z.string(),
+  chief: z.string().nullable(),
+  workers: z.array(z.string()),
+  pipeline_refs: z.array(z.string()),
+});
+
+export const OrgCardSchema = z.object({
+  director: z.object({
+    name: z.string().nullable(),
+    role: z.string().nullable(),
+    style: z.string().nullable(),
+  }).nullable(),
+  departments: z.array(DepartmentSchema),
+  governance: z.object({
+    cycle: z.string().nullable(),
+    chief_order: z.array(z.string()),
+    escalation: z.string().nullable(),
+  }),
+  pending: z.array(PendingItemSchema),
+  version: VersionSchema,
+});
+
+export type OrgCard = z.infer<typeof OrgCardSchema>;
+
 // ─── Union type for downstream consumers ───
 
-export type AnyCard = WorldCard | WorkflowCard | TaskCard;
+export type AnyCard = WorldCard | WorkflowCard | TaskCard | PipelineCard | AdapterCard | CommerceCard | OrgCard;
 
 // ─── Card Diff ───
 

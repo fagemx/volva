@@ -87,21 +87,49 @@ export const ConstitutionDataSchema = z.object({
 });
 export type ConstitutionData = z.infer<typeof ConstitutionDataSchema>;
 
+export const ActiveConstitutionDataSchema = z.object({
+  id: z.string(),
+  village_id: z.string(),
+  rules: z.array(z.object({
+    description: z.string(),
+    enforcement: z.enum(['hard', 'soft']),
+    scope: z.array(z.string()),
+  })),
+  allowed_permissions: z.array(z.string()).optional(),
+  budget_limits: z.object({
+    max_cost_per_action: z.number(),
+    max_cost_per_day: z.number(),
+    max_cost_per_loop: z.number(),
+  }).optional(),
+});
+export type ActiveConstitutionData = z.infer<typeof ActiveConstitutionDataSchema>;
+
 export const ChiefDataSchema = z.object({
   id: z.string(),
   village_id: z.string(),
   name: z.string(),
+  role: z.string().optional(),
+  personality: z.string().optional(),
+  permissions: z.array(z.string()).optional(),
 });
 export type ChiefData = z.infer<typeof ChiefDataSchema>;
 
 export const SkillDataSchema = z.object({
   id: z.string(),
   name: z.string(),
+  type: z.string().optional(),
+  description: z.string().optional(),
 });
 export type SkillData = z.infer<typeof SkillDataSchema>;
 
 export const PackApplyDataSchema = z.object({
   village_id: z.string(),
+  constitution_id: z.string(),
+  chief_id: z.string().nullable(),
+  skills: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+  })),
   applied: z.boolean(),
 });
 export type PackApplyData = z.infer<typeof PackApplyDataSchema>;

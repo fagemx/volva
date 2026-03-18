@@ -1,4 +1,4 @@
-import type { CardType, AnyCard, WorldCard, WorkflowCard } from '../schemas/card';
+import type { CardType, AnyCard, WorldCard, WorkflowCard, PipelineCard, AdapterCard, CommerceCard, OrgCard } from '../schemas/card';
 import type { SettlementTarget } from '../schemas/settlement';
 
 export function classifySettlement(
@@ -22,6 +22,34 @@ export function classifySettlement(
     }
     case 'task':
       return 'task';
+    case 'pipeline': {
+      const pipelineCard = card as PipelineCard;
+      if (pipelineCard.steps.length > 0) {
+        return 'pipeline';
+      }
+      return null;
+    }
+    case 'adapter': {
+      const adapterCard = card as AdapterCard;
+      if (adapterCard.platforms.some((p) => p.enabled)) {
+        return 'adapter_config';
+      }
+      return null;
+    }
+    case 'commerce': {
+      const commerceCard = card as CommerceCard;
+      if (commerceCard.offerings.length > 0) {
+        return 'market_init';
+      }
+      return null;
+    }
+    case 'org': {
+      const orgCard = card as OrgCard;
+      if (orgCard.departments.length > 0) {
+        return 'org_hierarchy';
+      }
+      return null;
+    }
     default: {
       const exhaustiveCheck: never = cardType;
       throw new Error(`Unknown card type: ${String(exhaustiveCheck)}`);

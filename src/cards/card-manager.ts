@@ -1,4 +1,14 @@
+import type { Database } from 'bun:sqlite';
 import type { CardType, AnyCard, CardDiff, CardEnvelope } from '../schemas/card';
+
+export interface DiffEntry {
+  id: string;
+  cardId: string;
+  fromVersion: number;
+  toVersion: number;
+  diff: CardDiff;
+  createdAt: string;
+}
 
 // ─── Diff Logic ───
 
@@ -73,63 +83,135 @@ export function computeDiff(
 // ─── CardManager ───
 
 export class CardManager {
-  private cards = new Map<string, CardEnvelope>();
-  private conversationIndex = new Map<string, string>();
+  constructor(private db: Database) {}
 
   create(
     conversationId: string,
     type: CardType,
     content: AnyCard,
   ): CardEnvelope {
+    const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    const card: CardEnvelope = {
-      id: crypto.randomUUID(),
+    const mergedContent = { ...content, version: 1 };
+
+    this.db.run(
+      'INSERT INTO cards (id, conversation_id, type, version, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, conversationId, type, 1, JSON.stringify(mergedContent), now, now],
+    );
+
+    return {
+      id,
       conversationId,
       type,
-      content: { ...content, version: 1 },
+      content: mergedContent,
       version: 1,
       createdAt: now,
       updatedAt: now,
     };
-    this.cards.set(card.id, card);
-    this.conversationIndex.set(conversationId, card.id);
-    return card;
   }
 
   update(
     cardId: string,
     content: AnyCard,
   ): { card: CardEnvelope; diff: CardDiff } {
-    const existing = this.cards.get(cardId);
-    if (!existing) {
+    const row = this.db
+      .query('SELECT * FROM cards WHERE id = ?')
+      .get(cardId) as Record<string, unknown> | null;
+
+    if (!row) {
       throw new Error(`Card not found: ${cardId}`);
     }
 
-    const newVersion = existing.version + 1;
-    const now = new Date().toISOString();
+    const existingContent = JSON.parse(row.content as string) as AnyCard;
+    const conversationId = row.conversation_id as string;
+    const type = row.type as CardType;
+    const originalCreatedAt = row.created_at as string;
+    const oldVersion = row.version as number;
 
+    const newVersion = oldVersion + 1;
+    const now = new Date().toISOString();
     const mergedContent = { ...content, version: newVersion };
 
     const diff = computeDiff(
-      existing.content as unknown as Record<string, unknown>,
+      existingContent as unknown as Record<string, unknown>,
       mergedContent as unknown as Record<string, unknown>,
     );
 
+    const newId = crypto.randomUUID();
+    this.db.run(
+      'INSERT INTO cards (id, conversation_id, type, version, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [newId, conversationId, type, newVersion, JSON.stringify(mergedContent), originalCreatedAt, now],
+    );
+
+    const diffId = crypto.randomUUID();
+    this.db.run(
+      'INSERT INTO card_diffs (id, card_id, from_version, to_version, diff, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [diffId, newId, oldVersion, newVersion, JSON.stringify(diff), now],
+    );
+
     const updatedCard: CardEnvelope = {
-      ...existing,
+      id: newId,
+      conversationId,
+      type,
       content: mergedContent,
       version: newVersion,
+      createdAt: originalCreatedAt,
       updatedAt: now,
     };
 
-    this.cards.set(cardId, updatedCard);
     return { card: updatedCard, diff };
   }
 
   getLatest(conversationId: string): CardEnvelope | null {
-    const cardId = this.conversationIndex.get(conversationId);
-    if (!cardId) return null;
-    return this.cards.get(cardId) ?? null;
+    const row = this.db
+      .query('SELECT * FROM cards WHERE conversation_id = ? ORDER BY version DESC LIMIT 1')
+      .get(conversationId) as Record<string, unknown> | null;
+
+    if (!row) return null;
+
+    return {
+      id: row.id as string,
+      conversationId: row.conversation_id as string,
+      type: row.type as CardType,
+      content: JSON.parse(row.content as string) as AnyCard,
+      version: row.version as number,
+      createdAt: row.created_at as string,
+      updatedAt: row.updated_at as string,
+    };
+  }
+
+  getVersionHistory(conversationId: string): CardEnvelope[] {
+    const rows = this.db
+      .query('SELECT * FROM cards WHERE conversation_id = ? ORDER BY version ASC')
+      .all(conversationId) as Record<string, unknown>[];
+
+    return rows.map((row) => ({
+      id: row.id as string,
+      conversationId: row.conversation_id as string,
+      type: row.type as CardType,
+      content: JSON.parse(row.content as string) as AnyCard,
+      version: row.version as number,
+      createdAt: row.created_at as string,
+      updatedAt: row.updated_at as string,
+    }));
+  }
+
+  getVersion(conversationId: string, version: number): CardEnvelope | null {
+    const row = this.db
+      .query('SELECT * FROM cards WHERE conversation_id = ? AND version = ?')
+      .get(conversationId, version) as Record<string, unknown> | null;
+
+    if (!row) return null;
+
+    return {
+      id: row.id as string,
+      conversationId: row.conversation_id as string,
+      type: row.type as CardType,
+      content: JSON.parse(row.content as string) as AnyCard,
+      version: row.version as number,
+      createdAt: row.created_at as string,
+      updatedAt: row.updated_at as string,
+    };
   }
 
   diff(oldContent: AnyCard, newContent: AnyCard): CardDiff {
@@ -137,5 +219,26 @@ export class CardManager {
       oldContent as unknown as Record<string, unknown>,
       newContent as unknown as Record<string, unknown>,
     );
+  }
+
+  getDiffHistory(conversationId: string): DiffEntry[] {
+    const rows = this.db
+      .query(
+        `SELECT cd.id, cd.card_id, cd.from_version, cd.to_version, cd.diff, cd.created_at
+         FROM card_diffs cd
+         JOIN cards c ON cd.card_id = c.id
+         WHERE c.conversation_id = ?
+         ORDER BY cd.from_version ASC`,
+      )
+      .all(conversationId) as Record<string, unknown>[];
+
+    return rows.map((row) => ({
+      id: row.id as string,
+      cardId: row.card_id as string,
+      fromVersion: row.from_version as number,
+      toVersion: row.to_version as number,
+      diff: JSON.parse(row.diff as string) as CardDiff,
+      createdAt: row.created_at as string,
+    }));
   }
 }

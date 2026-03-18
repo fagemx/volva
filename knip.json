@@ -1,0 +1,27 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": [
+    "src/index.ts",
+    "src/schemas/*.ts",
+    "src/llm/client.ts",
+    "src/cards/card-manager.ts",
+    "src/cards/village-loader.ts",
+    "src/conductor/turn-handler.ts",
+    "src/conductor/management-handler.ts",
+    "src/conductor/state-machine.ts",
+    "src/settlement/router.ts",
+    "src/settlement/adapter-config-builder.ts",
+    "src/settlement/commerce-spec-builder.ts",
+    "src/settlement/org-hierarchy-builder.ts",
+    "src/thyra-client/client.ts",
+    "src/thyra-client/schemas.ts",
+    "src/karvi-client/client.ts",
+    "src/karvi-client/schemas.ts",
+    "src/edda-client/client.ts",
+    "src/edda-client/schemas.ts",
+    "src/routes/*.ts"
+  ],
+  "project": [
+    "src/**/*.ts"
+  ]
+}

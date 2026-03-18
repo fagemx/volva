@@ -1,13 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { classifySettlement } from './router';
-import type { WorldCard, WorkflowCard, TaskCard } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, CommerceCard, OrgCard } from '../schemas/card';
 
 const emptyWorldCard: WorldCard = {
   goal: null,
-  confirmed: { hard_rules: [], soft_rules: [], must_have: [], success_criteria: [] },
+  target_repo: null,
+  confirmed: { hard_rules: [], soft_rules: [], must_have: [], success_criteria: [], evaluator_rules: [] },
   pending: [],
   chief_draft: null,
   budget_draft: null,
+  llm_preset: null,
   current_proposal: null,
   version: 1,
 };
@@ -16,7 +18,7 @@ describe('classifySettlement', () => {
   it('WorldCard with hard_rules → village_pack', () => {
     const card: WorldCard = {
       ...emptyWorldCard,
-      confirmed: { ...emptyWorldCard.confirmed, hard_rules: ['rule1'] },
+      confirmed: { ...emptyWorldCard.confirmed, hard_rules: [{ description: 'rule1', scope: ['*'] }] },
     };
     expect(classifySettlement('world', card)).toBe('village_pack');
   });
@@ -66,5 +68,86 @@ describe('classifySettlement', () => {
       version: 1,
     };
     expect(classifySettlement('task', card)).toBe('task');
+  });
+
+  it('PipelineCard with steps → pipeline', () => {
+    const card: PipelineCard = {
+      name: 'test',
+      steps: [{
+        order: 0,
+        type: 'skill',
+        label: 'step1',
+        skill_name: 'skill1',
+        instruction: null,
+        revision_target: null,
+        max_revision_cycles: null,
+        condition: null,
+        on_true: null,
+        on_false: null,
+      }],
+      schedule: null,
+      proposed_skills: [],
+      pending: [],
+      version: 1,
+    };
+    expect(classifySettlement('pipeline', card)).toBe('pipeline');
+  });
+
+  it('PipelineCard with empty steps → null', () => {
+    const card: PipelineCard = {
+      name: null,
+      steps: [],
+      schedule: null,
+      proposed_skills: [],
+      pending: [],
+      version: 1,
+    };
+    expect(classifySettlement('pipeline', card)).toBeNull();
+  });
+
+  it('CommerceCard with offerings → market_init', () => {
+    const card: CommerceCard = {
+      offerings: [
+        { type: 'stall_slot', name: 'Basic', description: 'A stall', base_price: 100, capacity: null, duration: null },
+      ],
+      pricing_rules: [],
+      pending: [],
+      version: 1,
+    };
+    expect(classifySettlement('commerce', card)).toBe('market_init');
+  });
+
+  it('CommerceCard with empty offerings → null', () => {
+    const card: CommerceCard = {
+      offerings: [],
+      pricing_rules: [],
+      pending: [],
+      version: 1,
+    };
+    expect(classifySettlement('commerce', card)).toBeNull();
+  });
+
+  it('OrgCard with departments → org_hierarchy', () => {
+    const card: OrgCard = {
+      director: { name: 'Alice', role: 'CTO', style: null },
+      departments: [
+        { name: 'Engineering', chief: 'Bob', workers: ['Carol'], pipeline_refs: [] },
+      ],
+      governance: { cycle: null, chief_order: [], escalation: null },
+      pending: [],
+      version: 1,
+    };
+    expect(classifySettlement('org', card)).toBe('org_hierarchy');
+  });
+
+  it('OrgCard with empty departments → null', () => {
+    const card: OrgCard = {
+      director: null,
+      departments: [],
+      governance: { cycle: null, chief_order: [], escalation: null },
+      pending: [],
+      version: 1,
+    };
+    expect(classifySettlement('org', card)).toBeNull();
   });
 });

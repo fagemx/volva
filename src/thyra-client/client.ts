@@ -6,12 +6,14 @@ import {
   type CreateSkillInput,
   type VillageData,
   type ConstitutionData,
+  type ActiveConstitutionData,
   type ChiefData,
   type SkillData,
   type PackApplyData,
   type HealthResponse,
   VillageDataSchema,
   ConstitutionDataSchema,
+  ActiveConstitutionDataSchema,
   ChiefDataSchema,
   SkillDataSchema,
   PackApplyDataSchema,
@@ -58,6 +60,22 @@ export class ThyraClient {
 
   async createSkill(input: CreateSkillInput): Promise<SkillData> {
     return this.request('POST', '/api/skills', SkillDataSchema, input);
+  }
+
+  async getSkills(): Promise<SkillData[]> {
+    return this.request('GET', '/api/skills', z.array(SkillDataSchema));
+  }
+
+  async getVillage(id: string): Promise<VillageData> {
+    return this.request('GET', `/api/villages/${id}`, VillageDataSchema);
+  }
+
+  async getActiveConstitution(villageId: string): Promise<ActiveConstitutionData> {
+    return this.request('GET', `/api/villages/${villageId}/constitutions/active`, ActiveConstitutionDataSchema);
+  }
+
+  async getChiefs(villageId: string): Promise<ChiefData[]> {
+    return this.request('GET', `/api/villages/${villageId}/chiefs`, z.array(ChiefDataSchema));
   }
 
   async applyVillagePack(yaml: string): Promise<PackApplyData> {

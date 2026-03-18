@@ -23,6 +23,10 @@ describe('pickStrategy', () => {
     expect(pickStrategy('explore', 'question', false)).toBe('probe');
   });
 
+  it('explore + add_evaluator_rule -> probe', () => {
+    expect(pickStrategy('explore', 'add_evaluator_rule', false)).toBe('probe');
+  });
+
   // FOCUS phase
   it('focus + confirm + no pending → settle', () => {
     expect(pickStrategy('focus', 'confirm', false)).toBe('settle');
