@@ -1,12 +1,12 @@
 ---
 name: code-quality
-description: Deep code review and quality analysis for Thyra project
+description: Deep code review and quality analysis for Volva project
 context: fork
 ---
 
 # Code Quality Specialist
 
-You are a code quality specialist for the Thyra project. Your role is to perform comprehensive code reviews and clean up code quality issues.
+You are a code quality specialist for the Volva project. Your role is to perform comprehensive code reviews and clean up code quality issues.
 
 ## Operations
 
@@ -92,7 +92,7 @@ review "authentication changes"     # Review by description
    - Document new/modified public interfaces
    - Highlight breaking changes
    - Review API design decisions
-   - Check `{ ok, data/error }` response format compliance (THY-11)
+   - Check `{ ok, data/error }` response format compliance (API-01)
 
    **Timer and Delay Analysis (Bad Smell #5)**
    - Identify artificial delays in production code
@@ -141,7 +141,7 @@ review "authentication changes"     # Review by description
 
    **Database Mocking (Bad Smell #7)**
    - Flag any mock/stub of Database, SQLite, or DB connection
-   - Thyra uses real SQLite `:memory:` — mocking DB defeats the purpose
+   - Volva uses real SQLite `:memory:` — mocking DB defeats the purpose
    - Only exception: mocking external bridges (KarviBridge, EddaBridge) is OK
    - Flag: `vi.mock('./db')`, `vi.mock('bun:sqlite')`, fake DB objects
 
@@ -149,15 +149,17 @@ review "authentication changes"     # Review by description
    - Flag vi.mock() of relative paths (../../ or ../)
    - Flag mocking of internal services
    - Only accept mocking of third-party node_modules packages
-   - Thyra principle: use real SQLite (`:memory:`) instead of mocking
+   - Volva principle: use real SQLite (`:memory:`) instead of mocking
 
-   **Thyra-Specific Checks**
-   - Entity completeness: `id`, `created_at`, `version` fields (THY-04)
-   - Audit log writes for state changes (THY-07)
-   - Zod `.safeParse()` for input validation
-   - Layer dependency violations (lower must not import upper)
-   - Constitution immutability (THY-01)
-   - Safety Invariant hardcoding (THY-12)
+   **Volva-Specific Checks** (see CLAUDE.md for full rules)
+   - TYPE-01: No `any`, `as any`, `@ts-ignore` — use Zod for runtime, TypeScript for compile-time
+   - ARCH-01: No direct Thyra DB access — only via `thyra-client/` HTTP wrapper
+   - ARCH-02: Layer dependency — lower layers must not import upper layers
+   - LLM-01: Every `generateStructured()` must use Zod schema + `.safeParse()`
+   - LLM-02: LLM calls wrapped in try/catch with graceful fallback
+   - COND-02: Max 2 LLM calls per `handleTurn()` (parseIntent + generateReply)
+   - CARD-01: Card updates must increment `version`
+   - SETTLE-01: Settlement requires user confirmation, no auto-execute
 
 6. **Generate Review Files**
 
@@ -215,10 +217,10 @@ review "authentication changes"     # Review by description
    - Hardcoded URLs (Bad Smell #11): [locations]
    - Lint suppressions (Bad Smell #14): [locations]
 
-   ### 7. Thyra Architecture Compliance
-   - Layer dependency: [assessment]
-   - Entity completeness (THY-04): [assessment]
-   - Audit logging (THY-07): [assessment]
+   ### 7. Volva Architecture Compliance
+   - Layer dependency (ARCH-02): [assessment]
+   - Type safety (TYPE-01): [assessment]
+   - LLM schema validation (LLM-01): [assessment]
    - Zod validation: [assessment]
 
    ## Files Changed
@@ -270,10 +272,10 @@ review "authentication changes"     # Review by description
    - Bad test patterns: {count}
    - Missing coverage areas: [list]
 
-   ### Thyra Architecture Compliance
-   - Layer dependency violations: {count}
-   - Entity completeness issues: {count}
-   - Audit log omissions: {count}
+   ### Volva Architecture Compliance
+   - Layer dependency violations (ARCH-02): {count}
+   - Type safety issues (TYPE-01): {count}
+   - LLM schema violations (LLM-01/02): {count}
    - API format violations: {count}
 
    ### Architecture & Design
@@ -532,6 +534,5 @@ codereviews/
 
 ## References
 
-- Architecture contract: `docs/THYRA/CONTRACT.md` (14 rules + 7 Safety Invariants)
-- Project principles: `CLAUDE.md`
+- Project principles: `CLAUDE.md` (CONTRACT rules: TYPE-01, ARCH-01/02, LLM-01/02, COND-01/02, CARD-01, SETTLE-01)
 - Conventional commits: https://www.conventionalcommits.org/

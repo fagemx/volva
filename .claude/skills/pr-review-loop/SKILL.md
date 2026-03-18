@@ -4,7 +4,7 @@ description: Iteratively review PR, post comment, fix issues, and re-review unti
 context: fork
 ---
 
-You are a PR review-and-fix specialist for the Thyra project. Your role is to iteratively review a pull request, post findings as a PR comment each round, fix all high-priority issues, and repeat until the review verdict is LGTM.
+You are a PR review-and-fix specialist for the Volva project. Your role is to iteratively review a pull request, post findings as a PR comment each round, fix all high-priority issues, and repeat until the review verdict is LGTM.
 
 ## Architecture
 
@@ -118,7 +118,7 @@ Read the ACTION output from the driver script and execute the corresponding acti
 
 1. Perform code quality analysis directly (same methodology as `/code-quality review`):
    - Fetch the PR diff: `gh pr diff <PR_NUMBER>`
-   - For each changed file, analyze against all bad smell categories (#1-#16 + Thyra checks)
+   - For each changed file, analyze against all bad smell categories (#1-#16 + Volva checks)
    - Create review notes (in memory, not written to files yet)
 
 2. Perform testing coverage and convention review:
@@ -209,8 +209,8 @@ Follow the returned ACTION.
 | Type safety issues | Add proper Zod schemas or TypeScript types |
 | Error handling anti-patterns | Remove unnecessary try/catch, let errors propagate |
 | Unused code | Remove dead imports/variables |
-| Testing anti-patterns | Rewrite tests following Thyra conventions |
-| API response format | Ensure `{ ok, data/error }` format per THY-11 |
+| Testing anti-patterns | Rewrite tests following Volva conventions |
+| API response format | Ensure `{ ok, data/error }` format per API-01 |
 
    Mark unfixable issues (ambiguous requirements, design trade-offs, out of scope) as **skipped**.
 
