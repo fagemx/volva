@@ -9,7 +9,7 @@ export function createDb(path: string = ':memory:'): Database {
 export function initSchema(db: Database): void {
   db.run(`CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
-    mode TEXT NOT NULL CHECK(mode IN ('world_design','workflow_design','task','pipeline_design','adapter_config','commerce_design','org_design')),
+    mode TEXT NOT NULL CHECK(mode IN ('world_design','workflow_design','task','pipeline_design','adapter_config','commerce_design','org_design','world_management')),
     phase TEXT NOT NULL DEFAULT 'explore' CHECK(phase IN ('explore','focus','settle')),
     village_id TEXT,
     skills_json TEXT,

@@ -13,6 +13,8 @@ export const IntentType = z.enum([
   'settle_signal',
   'question',
   'off_topic',
+  'query_status',
+  'query_history',
 ]);
 export type IntentType = z.infer<typeof IntentType>;
 

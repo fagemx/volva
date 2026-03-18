@@ -5,8 +5,10 @@ import type { LLMClient } from '../llm/client';
 import type { CardManager } from '../cards/card-manager';
 import type { ThyraClient } from '../thyra-client/client';
 import { handleTurn } from '../conductor/turn-handler';
+import { handleManagementTurn } from '../conductor/management-handler';
 import { loadVillageState } from '../cards/village-loader';
 import type { SkillData } from '../thyra-client/schemas';
+import type { ConversationMode } from '../schemas/conversation';
 
 export interface ConversationDeps {
   db: Database;
@@ -24,8 +26,17 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
     const mode = typeof body.mode === 'string' ? body.mode : 'world_design';
     const villageId = typeof body.village_id === 'string' ? body.village_id : undefined;
 
-    if (!['world_design', 'workflow_design', 'task'].includes(mode)) {
+    const validModes = ['world_design', 'workflow_design', 'task', 'pipeline_design', 'adapter_config', 'commerce_design', 'org_design', 'world_management'];
+    if (!validModes.includes(mode)) {
       return error(c, 'INVALID_INPUT', `Invalid mode: ${mode}`, 400);
+    }
+
+    if (mode === 'world_management' && !villageId) {
+      return error(c, 'INVALID_INPUT', 'village_id is required for world_management mode', 400);
+    }
+
+    if (mode === 'world_management' && !deps.thyra) {
+      return error(c, 'INVALID_INPUT', 'Thyra client is required for world_management mode', 400);
     }
 
     const id = crypto.randomUUID();
@@ -102,7 +113,7 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
     }
 
     const conv = deps.db
-      .query('SELECT phase, mode, nomod_streak, skills_json FROM conversations WHERE id = ?')
+      .query('SELECT phase, mode, nomod_streak, skills_json, village_id FROM conversations WHERE id = ?')
       .get(conversationId) as Record<string, unknown> | null;
 
     if (!conv) {
@@ -131,13 +142,40 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
     );
 
     try {
+      // Management mode: query-only, no card creation, no phase transitions
+      if (mode === 'world_management') {
+        const villageId = conv.village_id as string;
+        if (!deps.thyra) {
+          return error(c, 'INVALID_INPUT', 'Thyra client is required for world_management mode', 400);
+        }
+
+        const mgmtResult = await handleManagementTurn(deps.llm, deps.thyra, villageId, content);
+
+        deps.db.run(
+          'INSERT INTO messages (id, conversation_id, role, content, turn) VALUES (?, ?, ?, ?, ?)',
+          [crypto.randomUUID(), conversationId, 'assistant', mgmtResult.reply, turn],
+        );
+
+        deps.db.run(
+          "UPDATE conversations SET updated_at = datetime('now') WHERE id = ?",
+          [conversationId],
+        );
+
+        return ok(c, {
+          reply: mgmtResult.reply,
+          phase,
+          strategy: mgmtResult.strategy,
+          action: mgmtResult.action,
+        });
+      }
+
       const result = await handleTurn(
         deps.llm,
         deps.cardManager,
         conversationId,
         content,
         phase as 'explore' | 'focus' | 'settle',
-        mode as 'world_design' | 'workflow_design' | 'task',
+        mode as ConversationMode,
         nomodStreak,
         skills.length > 0 ? skills : undefined,
       );

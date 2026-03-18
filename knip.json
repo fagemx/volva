@@ -7,6 +7,7 @@
     "src/cards/card-manager.ts",
     "src/cards/village-loader.ts",
     "src/conductor/turn-handler.ts",
+    "src/conductor/management-handler.ts",
     "src/conductor/state-machine.ts",
     "src/settlement/router.ts",
     "src/settlement/adapter-config-builder.ts",

@@ -107,6 +107,7 @@ export function createEmptyOrgCard(): OrgCard {
 export function modeToCardType(mode: ConversationMode): CardType {
   switch (mode) {
     case 'world_design':
+    case 'world_management':
       return 'world';
     case 'workflow_design':
       return 'workflow';
@@ -126,6 +127,7 @@ export function modeToCardType(mode: ConversationMode): CardType {
 export function createEmptyCard(mode: ConversationMode): AnyCard {
   switch (mode) {
     case 'world_design':
+    case 'world_management':
       return createEmptyWorldCard();
     case 'workflow_design':
       return createEmptyWorkflowCard();
@@ -199,6 +201,21 @@ function applyModifyRule(updated: WorldCard, intent: Intent): void {
   updated.confirmed.soft_rules.push({ description: `[new] ${intent.summary}`, scope: ['*'] });
 }
 
+// ─── WorldCard Add Info Helper ───
+
+function applyWorldAddInfo(updated: WorldCard, intent: Intent): void {
+  if (!intent.entities) return;
+  for (const [key, value] of Object.entries(intent.entities)) {
+    if (key === 'llm_preset' && LlmPresetEnum.safeParse(value).success) {
+      updated.llm_preset = value as 'economy' | 'balanced' | 'performance';
+      continue;
+    }
+    if (!updated.confirmed.must_have.includes(value)) {
+      updated.confirmed.must_have.push(value);
+    }
+  }
+}
+
 // ─── Intent Apply Functions ───
 
 export function applyIntentToCard(card: WorldCard, intent: Intent): WorldCard {
@@ -209,17 +226,7 @@ export function applyIntentToCard(card: WorldCard, intent: Intent): WorldCard {
       if (intent.summary) updated.goal = intent.summary;
       break;
     case 'add_info':
-      if (intent.entities) {
-        for (const [key, value] of Object.entries(intent.entities)) {
-          if (key === 'llm_preset' && LlmPresetEnum.safeParse(value).success) {
-            updated.llm_preset = value as 'economy' | 'balanced' | 'performance';
-            continue;
-          }
-          if (!updated.confirmed.must_have.includes(value)) {
-            updated.confirmed.must_have.push(value);
-          }
-        }
-      }
+      applyWorldAddInfo(updated, intent);
       break;
     case 'set_boundary':
       if (intent.enforcement === 'hard') {
@@ -247,6 +254,8 @@ export function applyIntentToCard(card: WorldCard, intent: Intent): WorldCard {
     case 'settle_signal':
     case 'question':
     case 'off_topic':
+    case 'query_status':
+    case 'query_history':
       break;
   }
 
@@ -622,6 +631,8 @@ export function applyIntentToOrgCard(card: OrgCard, intent: Intent): OrgCard {
     case 'settle_signal':
     case 'question':
     case 'off_topic':
+    case 'query_status':
+    case 'query_history':
       break;
   }
 
