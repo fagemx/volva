@@ -44,5 +44,5 @@ The `raw/` subfolder contains the original GPT discussion transcripts these spec
 
 ## Relationship to Other Spec Stacks
 
-- `docs/world-design-v0/` — defines the world governance runtime (canonical cycle, change proposal, judgment, pulse, outcomes). This stack defines the **skill layer** that sits above it.
+- `docs/world-design-v0/` — defines the **pre-world decision pipeline** (intent routing, path check, space building, probe/commit) and the **type definitions** for the canonical cycle (WorldMode, Verdict, PulseFrame, etc.). The behavioral spec for the canonical cycle runtime belongs to Thyra. This stack defines the **skill layer** that sits alongside the decision pipeline.
 - `docs/storage/` — defines how decision state is stored, promoted, and tracked across layers. This stack defines **what skills are**; storage defines **where skill state lives**. The `routeDecision` field in storage references Forge sub-phase (see `volva-interaction-model-v0.md` Section 8).

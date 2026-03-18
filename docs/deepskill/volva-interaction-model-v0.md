@@ -178,22 +178,37 @@ User: "Yes"
 
 ## 8. Forge: The Build Sub-Phase
 
-**Forge** is not a standalone container. It is a sub-phase within the **World** container that activates after the user commits to a direction (i.e., space-building is complete and the user has confirmed a candidate).
+**Forge** is the post-commit build organ in the Völva pipeline. It receives a `CommitMemo` from probe-commit and builds the concrete deliverables.
+
+### Where Forge lives
+
+Forge is **not a standalone container**. It activates as a sub-phase within an existing container context:
+
+| Context | Forge activates when |
+|---------|---------------------|
+| **World container** (governance regime) | Space-building → commit → Forge builds world instantiation deliverables |
+| **Shape container** (any regime) | Intent routing → space-building → probe-commit → Forge builds the committed realization |
+| **Task container** (forge-fast-path) | Path already fixed, commit immediate → Forge builds directly |
 
 ```text
-World container phases:
-  space-building → [user commits] → Forge → [deliverables ready] → settlement
+Common flow (inside Shape or World container):
+  space-building → probe-commit → [user commits] → Forge → [deliverables ready] → settlement
+
+Fast-path (inside Task-like flow):
+  path-check → forge-fast-path → Forge → settlement
 ```
 
 ### What Forge does
-- Builds the concrete deliverables the user committed to (intake flows, checklists, configurations, etc.)
+- Receives a `CommitMemo` (from probe-commit layer, see `docs/world-design-v0/shared-types.md` §5.5)
+- Builds the concrete deliverables specified in `whatForgeShouldBuild`
+- Respects `whatForgeMustNotBuild` constraints
 - Operates in **Work mode** — the main agent reports progress, not asks questions
 - May dispatch sub-tasks to Karvi workers
 
 ### What Forge is NOT
-- Not a separate container (it lives inside World)
-- Not accessible without a prior commit decision
-- Not a general "build things" mode — it builds what was agreed in space-building
+- Not a separate container (it's a sub-phase within Shape, World, or Task)
+- Not accessible without a prior commit decision (no `CommitMemo` = no Forge)
+- Not a general "build things" mode — it builds what was committed in probe-commit, per the specific regime's evaluator output
 
 ### Route decision mapping (from `docs/storage/volva-working-state-schema-v0.md`)
 
@@ -202,6 +217,17 @@ World container phases:
 | `space-builder` | Stay in space-building, path still uncertain |
 | `space-builder-then-forge` | Space-building first, then Forge once committed |
 | `forge-fast-path` | Path already clear, skip space-building, enter Forge directly |
+
+### Relationship to world-design-v0 pipeline
+
+Forge sits at position 5 in the world-design-v0 pipeline:
+
+```text
+intent-router → path-check → space-builder → probe-commit → **Forge** → thyra (if governance)
+                                                           → settlement (if non-governance)
+```
+
+See `docs/world-design-v0/intent-router-and-space-builder.md` Section 4 for the full pipeline.
 
 ---
 

@@ -179,7 +179,48 @@ When routing is ambiguous, use these defaults:
 
 ---
 
-## 7. Canonical Examples
+## 7. Integration with World-Design Pipeline (Regime Routing)
+
+Container routing and regime routing are **complementary** — they answer different questions:
+
+| System | Question | Output |
+|--------|----------|--------|
+| **Container routing** (this doc) | Which work environment should handle this request? | Container + confidence |
+| **Regime routing** (`docs/world-design-v0/`) | What kind of terminal intent is this? | Regime + path certainty |
+
+### Where they connect
+
+The **Shape container** is where the world-design-v0 pipeline executes:
+
+```text
+Container routing: request → Gate 2 → Shape container
+                                        │
+Inside Shape:   intent-router → path-check → space-builder → probe-commit → Forge
+                                        │
+                    (see docs/world-design-v0/intent-router-and-space-builder.md)
+```
+
+The **World container** handles the governance regime's post-commit path:
+
+```text
+Container routing: request → Gate 1 → World container
+                                        │
+Inside World:   (if new) space-building → probe-commit → Forge → settlement → Thyra
+                (if existing) canonical cycle running
+```
+
+### Integration rules
+
+1. **Container routing runs first** — decides Shape/World/Skill/Task/Review/Harvest
+2. **Regime routing runs inside Shape** — only when the container is Shape (fuzzy intent)
+3. **World container may internally run regime routing** for governance-specific space-building
+4. **Skill/Task/Review containers do NOT run regime routing** — they already have clear work types
+
+> This means the world-design-v0 pipeline (intent-router → path-check → space-builder → probe-commit) is **not a replacement** for container routing — it's what happens **inside** the Shape and World containers when the intent is fuzzy.
+
+---
+
+## 8. Canonical Examples
 
 ### Example A: "Deploy checkout-service to staging"
 
@@ -213,7 +254,7 @@ Axes:
 
 ---
 
-## 8. Skill Registry Dependency
+## 9. Skill Registry Dependency
 
 Gate 4 of the routing protocol asks: "Does a mature skill exist for this problem class?" This requires a **skill registry** — a searchable index of available skills and their trigger conditions.
 
@@ -233,7 +274,7 @@ A full skill registry spec (indexing, search, conflict resolution) is out of sco
 
 ---
 
-## 9. Boundaries / Out of Scope
+## 10. Boundaries / Out of Scope
 
 - This spec defines **internal container routing**. The user-facing language (4 postures) is in `volva-interaction-model-v0.md`.
 - This spec does NOT define what happens inside each container — only how the system decides which one to enter.
