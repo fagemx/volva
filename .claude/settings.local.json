@@ -23,7 +23,8 @@
       "Bash(taskkill *)",
       "Bash(git add:*)",
       "Bash(cd:*)",
-      "Bash(for i:*)"
+      "Bash(for i:*)",
+      "Bash(xargs grep:*)"
     ]
   }
 }
