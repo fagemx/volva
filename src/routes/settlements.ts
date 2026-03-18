@@ -168,8 +168,36 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
               skill_name: string | null;
               instruction: string | null;
             }>;
+            proposed_skills?: Array<{
+              name: string;
+              type: string;
+              description: string;
+            }>;
           };
-          result = await deps.karvi.registerPipeline({
+
+          // Register proposed skills via Thyra (graceful degradation per skill)
+          const skillResults: Array<{ name: string; ok: boolean; error?: string }> = [];
+          if (spec.proposed_skills && spec.proposed_skills.length > 0) {
+            for (const skill of spec.proposed_skills) {
+              try {
+                await deps.thyra.createSkill({
+                  name: skill.name,
+                  type: skill.type,
+                  description: skill.description,
+                });
+                skillResults.push({ name: skill.name, ok: true });
+              } catch (err) {
+                console.error(`[settlement] createSkill failed for ${skill.name}:`, err);
+                skillResults.push({
+                  name: skill.name,
+                  ok: false,
+                  error: err instanceof Error ? err.message : 'Unknown error',
+                });
+              }
+            }
+          }
+
+          const pipelineResult = await deps.karvi.registerPipeline({
             name: spec.pipeline.name,
             steps: spec.steps.map((s) => ({
               order: s.order,
@@ -179,6 +207,7 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
               instruction: s.instruction,
             })),
           });
+          result = { ...pipelineResult as Record<string, unknown>, skill_registrations: skillResults };
           break;
         }
         case 'workflow':
