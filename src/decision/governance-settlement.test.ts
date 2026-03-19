@@ -6,6 +6,7 @@ import type { ForgeBuildResult, ForgeBuildRequest } from '../karvi-client/schema
 import type { WorldCard } from '../schemas/card';
 import type { ThyraClient } from '../thyra-client/client';
 import type { PackApplyData } from '../thyra-client/schemas';
+import { buildVillagePack } from '../settlement/village-pack-builder';
 import {
   verifyThyraHandoffRequirements,
   recordForgeBuild,
@@ -203,6 +204,7 @@ describe('settleGovernanceBuild', () => {
       db,
       thyra: thyra ?? makeThyraClient(),
       sessionManager,
+      buildVillagePack,
     };
   }
 

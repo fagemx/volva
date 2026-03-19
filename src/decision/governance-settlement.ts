@@ -4,7 +4,6 @@ import type { WorldCard } from '../schemas/card';
 import type { Regime } from '../schemas/decision';
 import type { ThyraClient } from '../thyra-client/client';
 import type { DecisionSessionManager } from './session-manager';
-import { buildVillagePack } from '../settlement/village-pack-builder';
 
 // ─── Types ───
 
@@ -17,7 +16,7 @@ export type GovernanceSettlementInput = {
 
 export type GovernanceSettlementResult =
   | { ok: true; villageId: string; constitutionId: string; chiefId: string | null }
-  | { ok: false; error: string; phase: 'verification' | 'build_record' | 'settlement' };
+  | { ok: false; error: string; phase: 'verification' | 'settlement' };
 
 export type HandoffVerification = {
   satisfied: boolean;
@@ -29,6 +28,7 @@ export type GovernanceSettlementDeps = {
   db: Database;
   thyra: ThyraClient;
   sessionManager: DecisionSessionManager;
+  buildVillagePack: (card: WorldCard) => string;
 };
 
 // ─── Handoff Verification ───
@@ -145,7 +145,7 @@ export async function settleGovernanceBuild(
   });
 
   // 6. Build village pack from worldCard
-  const villagePack = buildVillagePack(worldCard);
+  const villagePack = deps.buildVillagePack(worldCard);
 
   // 7. Send to Thyra (graceful degradation)
   try {
