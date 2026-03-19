@@ -112,7 +112,9 @@ function candidateToRealization(candidate: CandidateRow): RealizationCandidate {
     description: candidate.description,
     whyThisCandidate: candidate.whyExists,
     assumptions: candidate.assumptions,
-    probeReadinessHints: [],
+    probeReadinessHints: candidate.assumptions.length > 0
+      ? candidate.assumptions.map((a) => `Validate: ${a}`)
+      : ['Validate core assumptions'],
     timeToSignal: 'medium',
     notes: [],
   };
