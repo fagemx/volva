@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { SkillStatus } from './skill-object';
 
 // ─── Section 1: Base Types ───
 
@@ -329,7 +330,7 @@ export type AdmissionContext = {
   userId?: string;
   skillId: string;
   skillName: string;
-  skillStatus: string;
+  skillStatus: SkillStatus;
   executionMode: 'advisory' | 'assistive' | 'active' | 'destructive';
   externalSideEffects: boolean;
   timeoutMinutes: number;
