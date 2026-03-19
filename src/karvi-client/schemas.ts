@@ -43,6 +43,7 @@ export class KarviApiError extends KarviError {
   constructor(
     public readonly code: string,
     message: string,
+    public readonly details?: Record<string, string>,
   ) {
     super(message);
     this.name = 'KarviApiError';
@@ -56,6 +57,7 @@ export const KarviErrorResponseSchema = z.object({
   error: z.object({
     code: z.string(),
     message: z.string(),
+    pendingApprovalId: z.string().optional(),
   }),
 });
 

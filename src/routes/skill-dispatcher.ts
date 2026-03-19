@@ -21,7 +21,7 @@ export interface SkillDispatchContext {
 
 export type SkillDispatchOutcome =
   | { type: 'dispatched'; result: SkillDispatchResult }
-  | { type: 'approval_required'; pendingId: string; skillName: string; permissions: SkillObject['environment']['permissions']; sideEffects: boolean }
+  | { type: 'approval_required'; pendingId: string; skillName: string; permissions: SkillObject['environment']['permissions']; sideEffects: boolean; executionMode: string }
   | { type: 'fallback_local'; reason: string };
 
 export interface DispatchDeps {
@@ -157,10 +157,11 @@ export async function dispatchToKarvi(
     if (error instanceof KarviApiError && error.code === 'APPROVAL_REQUIRED') {
       return {
         type: 'approval_required',
-        pendingId: error.message,
+        pendingId: error.details?.pendingApprovalId ?? error.message,
         skillName: merged.name,
         permissions: merged.environment.permissions,
         sideEffects: merged.environment.externalSideEffects,
+        executionMode: merged.environment.executionMode,
       };
     }
 
