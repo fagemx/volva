@@ -234,9 +234,9 @@ describe('GP-1: Minimum Closed Loop', () => {
     const cardRes = await app.request(`/api/conversations/${id}/card`);
     const cardJson = (await cardRes.json()) as Record<string, unknown>;
 
-    expect(cardRes.status).toBe(200);
-    expect(cardJson.ok).toBe(true);
-    expect(cardJson.data).toBeNull();
+    expect(cardRes.status).toBe(404);
+    expect(cardJson.ok).toBe(false);
+    expect((cardJson.error as Record<string, unknown>).code).toBe('NOT_FOUND');
   });
 });
 

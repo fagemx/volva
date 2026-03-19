@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { ok } from './response';
+import { ok, error } from './response';
 import type { CardManager } from '../cards/card-manager';
 
 export interface CardDeps {
@@ -13,6 +13,9 @@ export function cardRoutes(deps: CardDeps): Hono {
   app.get('/api/conversations/:id/card', (c) => {
     const conversationId = c.req.param('id');
     const card = deps.cardManager.getLatest(conversationId);
+    if (!card) {
+      return error(c, 'NOT_FOUND', 'No card found for this conversation', 404);
+    }
     return ok(c, card);
   });
 
@@ -26,8 +29,15 @@ export function cardRoutes(deps: CardDeps): Hono {
   // GET /api/conversations/:id/card/version/:version
   app.get('/api/conversations/:id/card/version/:version', (c) => {
     const conversationId = c.req.param('id');
-    const version = parseInt(c.req.param('version'), 10);
+    const versionStr = c.req.param('version');
+    const version = parseInt(versionStr, 10);
+    if (!Number.isFinite(version) || version < 1) {
+      return error(c, 'INVALID_INPUT', `Invalid version: ${versionStr}`, 400);
+    }
     const card = deps.cardManager.getVersion(conversationId, version);
+    if (!card) {
+      return error(c, 'NOT_FOUND', `Card version ${version} not found`, 404);
+    }
     return ok(c, card);
   });
 

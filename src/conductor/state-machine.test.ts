@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { checkTransition } from './state-machine';
-import type { WorldCard, WorkflowCard, TaskCard } from '../schemas/card';
+import type { WorldCard, WorkflowCard, TaskCard, AdapterCard } from '../schemas/card';
+import type { Platform } from '../schemas/card';
 
 function makeWorldCard(opts: {
   hardRules?: string[];
@@ -353,5 +354,115 @@ describe('TaskCard transitions', () => {
     const result = checkTransition('focus', 'task', card, 'new_intent');
     expect(result.newPhase).toBe('explore');
     expect(result.reason).not.toBeNull();
+  });
+});
+
+// ─── AdapterCard Transitions ───
+
+function makeAdapterCard(opts: {
+  platforms?: Array<{ platform: Platform; enabled: boolean; role: string }>;
+}): AdapterCard {
+  return {
+    platforms: opts.platforms ?? [],
+    version: 1,
+  };
+}
+
+describe('AdapterCard: EXPLORE -> FOCUS transitions', () => {
+  it('explore -> focus when at least 1 platform added', () => {
+    const card = makeAdapterCard({
+      platforms: [{ platform: 'discord', enabled: true, role: 'announcements' }],
+    });
+    const result = checkTransition('explore', 'adapter', card, 'add_info');
+    expect(result.newPhase).toBe('focus');
+    expect(result.reason).toBe('platform added');
+  });
+
+  it('explore stays when no platforms', () => {
+    const card = makeAdapterCard({ platforms: [] });
+    const result = checkTransition('explore', 'adapter', card, 'add_info');
+    expect(result.newPhase).toBe('explore');
+    expect(result.reason).toBeNull();
+  });
+});
+
+describe('AdapterCard: FOCUS -> SETTLE transitions', () => {
+  it('focus -> settle on confirm when all enabled platforms have roles', () => {
+    const card = makeAdapterCard({
+      platforms: [
+        { platform: 'discord', enabled: true, role: 'announcements' },
+        { platform: 'telegram', enabled: false, role: '' },
+      ],
+    });
+    const result = checkTransition('focus', 'adapter', card, 'confirm');
+    expect(result.newPhase).toBe('settle');
+    expect(result.reason).toBe('all enabled platforms have roles + user confirmed');
+  });
+
+  it('focus -> settle on settle_signal when all enabled platforms have roles', () => {
+    const card = makeAdapterCard({
+      platforms: [{ platform: 'x', enabled: true, role: 'engagement' }],
+    });
+    const result = checkTransition('focus', 'adapter', card, 'settle_signal');
+    expect(result.newPhase).toBe('settle');
+    expect(result.reason).toBe('all enabled platforms have roles + user confirmed');
+  });
+
+  it('focus stays on confirm when enabled platform has empty role', () => {
+    const card = makeAdapterCard({
+      platforms: [{ platform: 'discord', enabled: true, role: '' }],
+    });
+    const result = checkTransition('focus', 'adapter', card, 'confirm');
+    expect(result.newPhase).toBe('focus');
+    expect(result.reason).toBeNull();
+  });
+
+  it('focus -> settle when consecutiveNoModTurns >= 2', () => {
+    const card = makeAdapterCard({
+      platforms: [{ platform: 'discord', enabled: true, role: '' }],
+    });
+    const result = checkTransition('focus', 'adapter', card, 'add_info', 2);
+    expect(result.newPhase).toBe('settle');
+    expect(result.reason).toBe('consecutive 2 turns with no modification');
+  });
+
+  it('focus stays when consecutiveNoModTurns < 2', () => {
+    const card = makeAdapterCard({
+      platforms: [{ platform: 'discord', enabled: true, role: '' }],
+    });
+    const result = checkTransition('focus', 'adapter', card, 'add_info', 1);
+    expect(result.newPhase).toBe('focus');
+    expect(result.reason).toBeNull();
+  });
+});
+
+describe('AdapterCard: SETTLE -> EXPLORE transitions', () => {
+  it('settle -> explore on new_intent', () => {
+    const card = makeAdapterCard({
+      platforms: [{ platform: 'discord', enabled: true, role: 'announcements' }],
+    });
+    const result = checkTransition('settle', 'adapter', card, 'new_intent');
+    expect(result.newPhase).toBe('explore');
+    expect(result.reason).toBe('new topic after settlement');
+  });
+
+  it('settle stays on confirm', () => {
+    const card = makeAdapterCard({
+      platforms: [{ platform: 'discord', enabled: true, role: 'announcements' }],
+    });
+    const result = checkTransition('settle', 'adapter', card, 'confirm');
+    expect(result.newPhase).toBe('settle');
+    expect(result.reason).toBeNull();
+  });
+});
+
+describe('AdapterCard: FOCUS -> EXPLORE rollback', () => {
+  it('focus -> explore on new_intent (rollback)', () => {
+    const card = makeAdapterCard({
+      platforms: [{ platform: 'discord', enabled: true, role: 'announcements' }],
+    });
+    const result = checkTransition('focus', 'adapter', card, 'new_intent');
+    expect(result.newPhase).toBe('explore');
+    expect(result.reason).toBe('major direction change');
   });
 });
