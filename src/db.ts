@@ -249,6 +249,23 @@ export function initSchema(db: Database): void {
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
 
+  // ─── Dispatch Queue Table ───
+
+  db.run(`CREATE TABLE IF NOT EXISTS dispatch_queue (
+    id TEXT PRIMARY KEY,
+    skill_id TEXT NOT NULL,
+    conversation_id TEXT,
+    request_json TEXT NOT NULL,
+    fallback_reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK(status IN ('pending','dispatched','failed','expired')),
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    max_retries INTEGER NOT NULL DEFAULT 3,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    next_retry_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
   // ─── Secondary Indexes ───
 
   db.run('CREATE INDEX IF NOT EXISTS idx_cards_conv_version ON cards(conversation_id, version)');
@@ -257,4 +274,5 @@ export function initSchema(db: Database): void {
   db.run('CREATE INDEX IF NOT EXISTS idx_decision_sessions_status ON decision_sessions(status)');
   db.run('CREATE INDEX IF NOT EXISTS idx_candidate_records_session ON candidate_records(session_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_approval_audits_pending ON approval_audits(pending_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_dispatch_queue_status ON dispatch_queue(status, next_retry_at)');
 }

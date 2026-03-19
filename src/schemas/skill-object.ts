@@ -41,6 +41,9 @@ export type ExecutionMode = z.infer<typeof ExecutionModeEnum>;
 export const DispatchModeEnum = z.enum(['local', 'karvi', 'hybrid']);
 export type DispatchMode = z.infer<typeof DispatchModeEnum>;
 
+export const FallbackStrategyEnum = z.enum(['local', 'queue', 'reject']);
+export type FallbackStrategy = z.infer<typeof FallbackStrategyEnum>;
+
 // ─── Section 1: Identity ───
 
 export const IdentitySchema = z.object({
@@ -173,6 +176,7 @@ const ApprovalSchema = z.object({
 
 export const DispatchSchema = z.object({
   mode: DispatchModeEnum,
+  fallback: FallbackStrategyEnum.default('local'),
   targetSelection: z.object({
     repoPolicy: z.string(),
     runtimeOptions: z.array(z.string()),

@@ -71,6 +71,7 @@ function makeSkillObject(overrides?: Partial<SkillObject>): SkillObject {
     },
     dispatch: {
       mode: 'karvi',
+      fallback: 'local',
       targetSelection: { repoPolicy: 'explicit', runtimeOptions: ['claude'] },
       workerClass: ['implementation'],
       handoff: { inputArtifacts: [], outputArtifacts: ['deploy_url'] },
@@ -116,7 +117,7 @@ function makeMockKarviClient(): KarviClient & {
   return {
     dispatchSkill: vi.fn(),
     getDispatchStatus: vi.fn(),
-    getHealth: vi.fn(),
+    getHealth: vi.fn().mockResolvedValue({ ok: true }),
     cancelDispatch: vi.fn(),
     registerPipeline: vi.fn(),
     listPipelines: vi.fn(),

@@ -84,6 +84,7 @@ function makeSkillObject(
     },
     dispatch: {
       mode: 'local',
+      fallback: 'local',
       targetSelection: { repoPolicy: 'current', runtimeOptions: [] },
       workerClass: [],
       handoff: { inputArtifacts: [], outputArtifacts: [] },

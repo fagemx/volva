@@ -98,6 +98,14 @@ function createApprovalMockFetch(state: ApprovalMockState) {
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
+    // GET /api/health -> return healthy
+    if (method === 'GET' && urlStr.endsWith('/api/health')) {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response('Not Found', { status: 404 });
   }) as unknown as typeof fetch;
 }
@@ -164,6 +172,7 @@ function makeSkillObject(overrides?: { requireHumanBeforeDispatch?: boolean }): 
     },
     dispatch: {
       mode: 'karvi',
+      fallback: 'local',
       targetSelection: { repoPolicy: 'explicit', runtimeOptions: ['claude'] },
       workerClass: ['implementation'],
       handoff: { inputArtifacts: [], outputArtifacts: ['deploy_url'] },
