@@ -29,7 +29,7 @@ export class KarviClient {
   private readonly fetchFn: typeof fetch;
 
   constructor(options: KarviClientOptions = {}) {
-    this.baseUrl = options.baseUrl ?? 'http://localhost:3463';
+    this.baseUrl = options.baseUrl ?? 'http://localhost:3464';
     this.timeout = options.timeout ?? 10_000;
     this.retries = options.retries ?? 2;
     this.fetchFn = options.fetchFn ?? globalThis.fetch;

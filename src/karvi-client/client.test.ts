@@ -35,7 +35,7 @@ describe('URL construction', () => {
       }),
     });
     await client.registerPipeline({ name: 'deploy-pipe', steps: [sampleStep] });
-    expect(capturedUrl).toBe('http://localhost:3463/api/pipelines');
+    expect(capturedUrl).toBe('http://localhost:3464/api/pipelines');
     expect(capturedMethod).toBe('POST');
   });
 
@@ -50,7 +50,7 @@ describe('URL construction', () => {
       }),
     });
     await client.listPipelines();
-    expect(capturedUrl).toBe('http://localhost:3463/api/pipelines');
+    expect(capturedUrl).toBe('http://localhost:3464/api/pipelines');
     expect(capturedMethod).toBe('GET');
   });
 
@@ -65,7 +65,7 @@ describe('URL construction', () => {
       }),
     });
     await client.deletePipeline('my-pipe');
-    expect(capturedUrl).toBe('http://localhost:3463/api/pipelines/my-pipe');
+    expect(capturedUrl).toBe('http://localhost:3464/api/pipelines/my-pipe');
     expect(capturedMethod).toBe('DELETE');
   });
 
@@ -78,7 +78,7 @@ describe('URL construction', () => {
       }),
     });
     await client.getHealth();
-    expect(capturedUrl).toBe('http://localhost:3463/api/health');
+    expect(capturedUrl).toBe('http://localhost:3464/api/health');
   });
 
   it('custom baseUrl is respected', async () => {
