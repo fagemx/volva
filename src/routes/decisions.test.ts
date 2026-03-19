@@ -814,4 +814,152 @@ describe('Decision Routes E2E', () => {
       expect(reclassifyRes.status).toBe(400);
     });
   });
+
+  // ═══════════════════════════════════════════
+  // Forge Result Telemetry (Issue #153)
+  // ═══════════════════════════════════════════
+  describe('forge-result telemetry recording', () => {
+    async function createDoneSession(): Promise<string> {
+      llm.generateStructured.mockResolvedValueOnce({ ok: true, data: economicIntentRoute });
+      const startRes = await jsonPost(app, '/api/decisions/start', { userMessage: 'test' });
+      const startBody = await startRes.json() as { ok: boolean; data: { sessionId: string } };
+      const sessionId = startBody.data.sessionId;
+
+      await jsonPost(app, `/api/decisions/${sessionId}/path-check`, {});
+      llm.generateStructured.mockResolvedValueOnce({ ok: true, data: makeEconomicCandidates() });
+      await jsonPost(app, `/api/decisions/${sessionId}/space-build`, { userMessage: 'test' });
+      const candidates = sessionManager.getCandidates(sessionId);
+
+      await jsonPost(app, `/api/decisions/${sessionId}/evaluate`, {
+        candidateId: candidates[0].id,
+        signals: [{ signalType: 'x', strength: 'strong', evidence: ['e'], interpretation: 'i', nextQuestions: [] }],
+      });
+
+      await jsonPost(app, `/api/decisions/${sessionId}/forge`, { confirmation: true });
+      return sessionId;
+    }
+
+    function makeForgeResultPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+      return {
+        sessionId: 'sess-test',
+        status: 'success',
+        durationMs: 5000,
+        artifacts: [
+          { type: 'file', path: '/src/main.ts', description: 'Main entry' },
+        ],
+        steps: [
+          { stepId: 'plan-1', type: 'plan', status: 'success', artifacts: [] },
+          { stepId: 'implement-1', type: 'implement', status: 'success', artifacts: ['/src/main.ts'] },
+          { stepId: 'review-1', type: 'review', status: 'success', artifacts: [] },
+        ],
+        telemetry: {
+          tokensUsed: 25000,
+          costUsd: 0.10,
+          runtime: 'karvi-worker',
+          model: 'claude-sonnet-4-20250514',
+          stepsExecuted: 3,
+        },
+        ...overrides,
+      };
+    }
+
+    it('records multi-step forge result (3 steps)', async () => {
+      const sessionId = await createDoneSession();
+      const res = await jsonPost(app, `/api/decisions/${sessionId}/forge-result`, makeForgeResultPayload());
+      expect(res.status).toBe(200);
+
+      const body = await res.json() as {
+        ok: boolean;
+        data: { sessionId: string; buildId: string; outcome: string };
+      };
+      expect(body.ok).toBe(true);
+      expect(body.data.buildId).toMatch(/^forge_/);
+      expect(body.data.outcome).toBe('success');
+
+      // Verify DB record
+      const row = db.prepare('SELECT * FROM forge_builds WHERE id = ?').get(body.data.buildId) as Record<string, unknown>;
+      expect(row.tokens_used).toBe(25000);
+      expect(row.cost_usd).toBe(0.10);
+      expect(row.artifact_count).toBe(1);
+      expect(row.failed_steps_json).toBeNull();
+    });
+
+    it('records single-step forge result (fallback)', async () => {
+      const sessionId = await createDoneSession();
+      const payload = makeForgeResultPayload({
+        steps: [
+          { stepId: 'exec-1', type: 'execute', status: 'success', artifacts: [] },
+        ],
+        telemetry: {
+          tokensUsed: 8000,
+          costUsd: 0.03,
+          runtime: 'karvi-worker',
+          model: 'claude-sonnet-4-20250514',
+          stepsExecuted: 1,
+        },
+      });
+
+      const res = await jsonPost(app, `/api/decisions/${sessionId}/forge-result`, payload);
+      expect(res.status).toBe(200);
+
+      const body = await res.json() as {
+        ok: boolean;
+        data: { buildId: string; outcome: string };
+      };
+      expect(body.data.outcome).toBe('success');
+
+      const row = db.prepare('SELECT tokens_used FROM forge_builds WHERE id = ?').get(body.data.buildId) as Record<string, unknown>;
+      expect(row.tokens_used).toBe(8000);
+    });
+
+    it('records partial failure with failed steps', async () => {
+      const sessionId = await createDoneSession();
+      const payload = makeForgeResultPayload({
+        status: 'partial',
+        steps: [
+          { stepId: 'plan-1', type: 'plan', status: 'success', artifacts: [] },
+          { stepId: 'implement-1', type: 'implement', status: 'failure', artifacts: [] },
+          { stepId: 'review-1', type: 'review', status: 'skipped', artifacts: [] },
+        ],
+      });
+
+      const res = await jsonPost(app, `/api/decisions/${sessionId}/forge-result`, payload);
+      expect(res.status).toBe(200);
+
+      const body = await res.json() as {
+        ok: boolean;
+        data: { buildId: string; outcome: string };
+      };
+      expect(body.data.outcome).toBe('partial');
+
+      const row = db.prepare('SELECT failed_steps_json, status FROM forge_builds WHERE id = ?').get(body.data.buildId) as Record<string, unknown>;
+      expect(row.status).toBe('partial');
+      expect(JSON.parse(row.failed_steps_json as string)).toEqual(['implement-1: implement']);
+    });
+
+    it('returns 404 for nonexistent session', async () => {
+      const res = await jsonPost(app, '/api/decisions/ds_nonexistent/forge-result', makeForgeResultPayload());
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 400 for session not in done stage', async () => {
+      llm.generateStructured.mockResolvedValueOnce({ ok: true, data: economicIntentRoute });
+      const startRes = await jsonPost(app, '/api/decisions/start', { userMessage: 'test' });
+      const startBody = await startRes.json() as { ok: boolean; data: { sessionId: string } };
+      const sessionId = startBody.data.sessionId;
+
+      const res = await jsonPost(app, `/api/decisions/${sessionId}/forge-result`, makeForgeResultPayload());
+      expect(res.status).toBe(400);
+      const body = await res.json() as { ok: boolean; error: { code: string } };
+      expect(body.error.code).toBe('INVALID_STAGE');
+    });
+
+    it('returns 400 for invalid payload', async () => {
+      const sessionId = await createDoneSession();
+      const res = await jsonPost(app, `/api/decisions/${sessionId}/forge-result`, { invalid: true });
+      expect(res.status).toBe(400);
+      const body = await res.json() as { ok: boolean; error: { code: string } };
+      expect(body.error.code).toBe('INVALID_INPUT');
+    });
+  });
 });
