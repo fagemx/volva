@@ -1,7 +1,11 @@
 import type {
+  CapabilityCommitMemo,
   CommitMemo,
   EconomicCommitMemo,
+  ExpressionCommitMemo,
   GovernanceCommitMemo,
+  IdentityCommitMemo,
+  LeverageCommitMemo,
   EvaluatorOutput,
   RealizationCandidate,
   GovernanceWorldCandidate,
@@ -159,12 +163,92 @@ function buildGovernanceCommitMemo(
   };
 }
 
+function buildCapabilityCommitMemo(
+  base: CommitMemo,
+  output: EvaluatorOutput,
+  candidate: RealizationCandidate,
+): CapabilityCommitMemo {
+  const skillDomain = candidate.domain ?? candidate.description;
+  const currentLevel = candidate.assumptions.find((a) =>
+    a.toLowerCase().includes('current') || a.toLowerCase().includes('level'),
+  ) ?? 'unknown';
+  const targetLevel = candidate.whyThisCandidate.find((w) =>
+    w.toLowerCase().includes('target') || w.toLowerCase().includes('goal'),
+  ) ?? (output.recommendedNextStep[0] || 'target');
+  const proofMethod = candidate.form;
+
+  return {
+    ...base,
+    skillDomain,
+    currentLevel,
+    targetLevel,
+    proofMethod,
+    milestones: output.recommendedNextStep,
+  };
+}
+
+function buildLeverageCommitMemo(
+  base: CommitMemo,
+  output: EvaluatorOutput,
+  candidate: RealizationCandidate,
+): LeverageCommitMemo {
+  const leverageType = candidate.form;
+  const currentBottleneck = candidate.whyThisCandidate[0] ?? candidate.description;
+  const amplificationTarget = output.recommendedNextStep[0] ?? candidate.description;
+  const riskIfNotBuilt = output.unresolvedRisks[0] ?? '';
+
+  return {
+    ...base,
+    leverageType,
+    currentBottleneck,
+    amplificationTarget,
+    dependencies: candidate.assumptions,
+    riskIfNotBuilt,
+  };
+}
+
+function buildExpressionCommitMemo(
+  base: CommitMemo,
+  output: EvaluatorOutput,
+  candidate: RealizationCandidate,
+): ExpressionCommitMemo {
+  const medium = candidate.form;
+  const audience = candidate.domain ?? 'unknown';
+  const coreMessage = candidate.whyThisCandidate[0] ?? candidate.description;
+
+  return {
+    ...base,
+    medium,
+    audience,
+    coreMessage,
+    styleConstraints: candidate.assumptions,
+    existingAssets: candidate.notes,
+  };
+}
+
+function buildIdentityCommitMemo(
+  base: CommitMemo,
+  output: EvaluatorOutput,
+  candidate: RealizationCandidate,
+): IdentityCommitMemo {
+  const scope = candidate.domain ?? 'unknown';
+
+  return {
+    ...base,
+    scope,
+    coreValues: candidate.whyThisCandidate,
+    tensions: output.unresolvedRisks,
+    rituals: output.recommendedNextStep,
+    boundaries: candidate.assumptions,
+  };
+}
+
 // ─── Main Export ───
 
 export function buildCommitMemo(
   evaluatorOutput: EvaluatorOutput,
   candidate: RealizationCandidate,
-): CommitMemo | EconomicCommitMemo | GovernanceCommitMemo {
+): CommitMemo | EconomicCommitMemo | GovernanceCommitMemo | CapabilityCommitMemo | LeverageCommitMemo | ExpressionCommitMemo | IdentityCommitMemo {
   const baseMemo: CommitMemo = {
     candidateId: candidate.id,
     regime: candidate.regime,
@@ -177,11 +261,18 @@ export function buildCommitMemo(
     recommendedNextStep: evaluatorOutput.recommendedNextStep,
   };
 
-  if (candidate.regime === 'economic') {
-    return buildEconomicCommitMemo(baseMemo, evaluatorOutput, candidate);
+  switch (candidate.regime) {
+    case 'economic':
+      return buildEconomicCommitMemo(baseMemo, evaluatorOutput, candidate);
+    case 'governance':
+      return buildGovernanceCommitMemo(baseMemo, evaluatorOutput, candidate);
+    case 'capability':
+      return buildCapabilityCommitMemo(baseMemo, evaluatorOutput, candidate);
+    case 'leverage':
+      return buildLeverageCommitMemo(baseMemo, evaluatorOutput, candidate);
+    case 'expression':
+      return buildExpressionCommitMemo(baseMemo, evaluatorOutput, candidate);
+    case 'identity':
+      return buildIdentityCommitMemo(baseMemo, evaluatorOutput, candidate);
   }
-  if (candidate.regime === 'governance') {
-    return buildGovernanceCommitMemo(baseMemo, evaluatorOutput, candidate);
-  }
-  return baseMemo;
 }

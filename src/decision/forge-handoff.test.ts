@@ -2,8 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { buildForgeBuildRequest, buildSyntheticCommitMemo, type ForgeHandoffContext } from './forge-handoff';
 import { ForgeBuildRequestSchema } from '../karvi-client/schemas';
 import type {
+  CapabilityCommitMemo,
   EconomicCommitMemo,
+  ExpressionCommitMemo,
   GovernanceCommitMemo,
+  IdentityCommitMemo,
+  LeverageCommitMemo,
   CommitMemo,
   PathCheckResult,
 } from '../schemas/decision';
@@ -56,6 +60,86 @@ function makeGovernanceMemo(overrides?: Partial<GovernanceCommitMemo>): Governan
     governancePressureAssessment: 'high',
     firstCycleDesign: ['Weekly review cycle', 'Dispute resolution'],
     thyraHandoffRequirements: ['Chief must approve stall changes', 'Max 50 stalls'],
+    ...overrides,
+  };
+}
+
+function makeCapabilityMemo(overrides?: Partial<CapabilityCommitMemo>): CapabilityCommitMemo {
+  return {
+    candidateId: 'cap-001',
+    regime: 'capability',
+    verdict: 'commit',
+    rationale: ['Skill gap identified in data analysis'],
+    evidenceUsed: ['Self-assessment results'],
+    unresolvedRisks: ['Time commitment uncertain'],
+    whatForgeShouldBuild: ['Practice loop structure', 'Portfolio template'],
+    whatForgeMustNotBuild: ['Full certification program'],
+    recommendedNextStep: ['Start daily practice'],
+    skillDomain: 'data-analysis',
+    currentLevel: 'beginner',
+    targetLevel: 'intermediate',
+    proofMethod: 'portfolio review',
+    milestones: ['Complete 3 case studies', 'Pass skill assessment'],
+    ...overrides,
+  };
+}
+
+function makeLeverageMemo(overrides?: Partial<LeverageCommitMemo>): LeverageCommitMemo {
+  return {
+    candidateId: 'lev-001',
+    regime: 'leverage',
+    verdict: 'commit',
+    rationale: ['Manual process consuming 10h/week'],
+    evidenceUsed: ['Time tracking data'],
+    unresolvedRisks: ['Integration complexity'],
+    whatForgeShouldBuild: ['Automation pipeline', 'Monitoring dashboard'],
+    whatForgeMustNotBuild: ['Full enterprise platform'],
+    recommendedNextStep: ['Deploy MVP automation'],
+    leverageType: 'automation',
+    currentBottleneck: 'Manual data entry consuming 10h/week',
+    amplificationTarget: '5x throughput improvement',
+    dependencies: ['API access', 'Data schema documentation'],
+    riskIfNotBuilt: 'Team burnout from repetitive tasks',
+    ...overrides,
+  };
+}
+
+function makeExpressionMemo(overrides?: Partial<ExpressionCommitMemo>): ExpressionCommitMemo {
+  return {
+    candidateId: 'exp-001',
+    regime: 'expression',
+    verdict: 'commit',
+    rationale: ['Brand identity needs clear articulation'],
+    evidenceUsed: ['Customer feedback', 'Competitor analysis'],
+    unresolvedRisks: ['Audience reception unknown'],
+    whatForgeShouldBuild: ['Landing page', 'Brand guide'],
+    whatForgeMustNotBuild: ['Full marketing campaign'],
+    recommendedNextStep: ['Launch landing page and measure engagement'],
+    medium: 'website',
+    audience: 'indie developers',
+    coreMessage: 'Tools that respect your craft',
+    styleConstraints: ['Minimalist', 'Technical but approachable'],
+    existingAssets: ['Logo draft', 'Color palette'],
+    ...overrides,
+  };
+}
+
+function makeIdentityMemo(overrides?: Partial<IdentityCommitMemo>): IdentityCommitMemo {
+  return {
+    candidateId: 'id-001',
+    regime: 'identity',
+    verdict: 'commit',
+    rationale: ['Team culture needs definition'],
+    evidenceUsed: ['Team survey results'],
+    unresolvedRisks: ['Disagreement on values'],
+    whatForgeShouldBuild: ['Values framework', 'Decision principles'],
+    whatForgeMustNotBuild: ['Rigid hierarchy'],
+    recommendedNextStep: ['Workshop to align on values'],
+    scope: 'engineering-team',
+    coreValues: ['Craft', 'Autonomy', 'Transparency'],
+    tensions: ['Speed vs quality', 'Individual vs team'],
+    rituals: ['Weekly retro', 'Pair programming sessions'],
+    boundaries: ['No blame culture', 'No mandatory overtime'],
     ...overrides,
   };
 }
@@ -196,31 +280,177 @@ describe('buildForgeBuildRequest', () => {
     });
   });
 
-  describe('generic fallback', () => {
-    it('maps non-economic non-governance memo to ForgeBuildRequest with economic regimeContext', () => {
+  describe('capability regime', () => {
+    it('maps CapabilityCommitMemo to ForgeBuildRequest with capability regimeContext', () => {
+      const memo = makeCapabilityMemo();
+      const result = buildForgeBuildRequest(memo, makeContext());
+
+      expect(result.regime).toBe('capability');
+      expect(result.regimeContext.kind).toBe('capability');
+      expect(result.whatToBuild).toEqual(memo.whatForgeShouldBuild);
+    });
+
+    it('includes all 5 capability regimeContext fields', () => {
+      const memo = makeCapabilityMemo();
+      const result = buildForgeBuildRequest(memo, makeContext());
+
+      if (result.regimeContext.kind !== 'capability') throw new Error('unreachable');
+
+      expect(result.regimeContext.skillDomain).toBe(memo.skillDomain);
+      expect(result.regimeContext.currentLevel).toBe(memo.currentLevel);
+      expect(result.regimeContext.targetLevel).toBe(memo.targetLevel);
+      expect(result.regimeContext.proofMethod).toBe(memo.proofMethod);
+      expect(result.regimeContext.milestones).toEqual(memo.milestones);
+    });
+
+    it('validates output against ForgeBuildRequestSchema', () => {
+      const result = buildForgeBuildRequest(makeCapabilityMemo(), makeContext());
+      const parsed = ForgeBuildRequestSchema.safeParse(result);
+      expect(parsed.success).toBe(true);
+    });
+  });
+
+  describe('leverage regime', () => {
+    it('maps LeverageCommitMemo to ForgeBuildRequest with leverage regimeContext', () => {
+      const memo = makeLeverageMemo();
+      const result = buildForgeBuildRequest(memo, makeContext());
+
+      expect(result.regime).toBe('leverage');
+      expect(result.regimeContext.kind).toBe('leverage');
+      expect(result.whatToBuild).toEqual(memo.whatForgeShouldBuild);
+    });
+
+    it('includes all 5 leverage regimeContext fields', () => {
+      const memo = makeLeverageMemo();
+      const result = buildForgeBuildRequest(memo, makeContext());
+
+      if (result.regimeContext.kind !== 'leverage') throw new Error('unreachable');
+
+      expect(result.regimeContext.leverageType).toBe(memo.leverageType);
+      expect(result.regimeContext.currentBottleneck).toBe(memo.currentBottleneck);
+      expect(result.regimeContext.amplificationTarget).toBe(memo.amplificationTarget);
+      expect(result.regimeContext.dependencies).toEqual(memo.dependencies);
+      expect(result.regimeContext.riskIfNotBuilt).toBe(memo.riskIfNotBuilt);
+    });
+
+    it('validates output against ForgeBuildRequestSchema', () => {
+      const result = buildForgeBuildRequest(makeLeverageMemo(), makeContext());
+      const parsed = ForgeBuildRequestSchema.safeParse(result);
+      expect(parsed.success).toBe(true);
+    });
+  });
+
+  describe('expression regime', () => {
+    it('maps ExpressionCommitMemo to ForgeBuildRequest with expression regimeContext', () => {
+      const memo = makeExpressionMemo();
+      const result = buildForgeBuildRequest(memo, makeContext());
+
+      expect(result.regime).toBe('expression');
+      expect(result.regimeContext.kind).toBe('expression');
+      expect(result.whatToBuild).toEqual(memo.whatForgeShouldBuild);
+    });
+
+    it('includes all 5 expression regimeContext fields', () => {
+      const memo = makeExpressionMemo();
+      const result = buildForgeBuildRequest(memo, makeContext());
+
+      if (result.regimeContext.kind !== 'expression') throw new Error('unreachable');
+
+      expect(result.regimeContext.medium).toBe(memo.medium);
+      expect(result.regimeContext.audience).toBe(memo.audience);
+      expect(result.regimeContext.coreMessage).toBe(memo.coreMessage);
+      expect(result.regimeContext.styleConstraints).toEqual(memo.styleConstraints);
+      expect(result.regimeContext.existingAssets).toEqual(memo.existingAssets);
+    });
+
+    it('validates output against ForgeBuildRequestSchema', () => {
+      const result = buildForgeBuildRequest(makeExpressionMemo(), makeContext());
+      const parsed = ForgeBuildRequestSchema.safeParse(result);
+      expect(parsed.success).toBe(true);
+    });
+  });
+
+  describe('identity regime', () => {
+    it('maps IdentityCommitMemo to ForgeBuildRequest with identity regimeContext', () => {
+      const memo = makeIdentityMemo();
+      const result = buildForgeBuildRequest(memo, makeContext());
+
+      expect(result.regime).toBe('identity');
+      expect(result.regimeContext.kind).toBe('identity');
+      expect(result.whatToBuild).toEqual(memo.whatForgeShouldBuild);
+    });
+
+    it('includes all 5 identity regimeContext fields', () => {
+      const memo = makeIdentityMemo();
+      const result = buildForgeBuildRequest(memo, makeContext());
+
+      if (result.regimeContext.kind !== 'identity') throw new Error('unreachable');
+
+      expect(result.regimeContext.scope).toBe(memo.scope);
+      expect(result.regimeContext.coreValues).toEqual(memo.coreValues);
+      expect(result.regimeContext.tensions).toEqual(memo.tensions);
+      expect(result.regimeContext.rituals).toEqual(memo.rituals);
+      expect(result.regimeContext.boundaries).toEqual(memo.boundaries);
+    });
+
+    it('validates output against ForgeBuildRequestSchema', () => {
+      const result = buildForgeBuildRequest(makeIdentityMemo(), makeContext());
+      const parsed = ForgeBuildRequestSchema.safeParse(result);
+      expect(parsed.success).toBe(true);
+    });
+  });
+
+  describe('base CommitMemo fallback (no regime-specific extension)', () => {
+    it('maps base capability memo to ForgeBuildRequest with capability regimeContext', () => {
       const memo = makeBaseMemo();
       const result = buildForgeBuildRequest(memo, makeContext());
 
       expect(result.regime).toBe('capability');
-      expect(result.regimeContext.kind).toBe('economic');
+      expect(result.regimeContext.kind).toBe('capability');
       expect(result.whatToBuild).toEqual(memo.whatForgeShouldBuild);
     });
 
-    it('uses rationale as fallback for economic fields', () => {
+    it('derives capability context fields from base memo fields', () => {
       const memo = makeBaseMemo();
       const result = buildForgeBuildRequest(memo, makeContext());
 
-      if (result.regimeContext.kind !== 'economic') throw new Error('unreachable');
-      expect(result.regimeContext.buyerHypothesis).toBe(memo.rationale[0]);
-      expect(result.regimeContext.painHypothesis).toBe(memo.rationale.join('; '));
-      expect(result.regimeContext.vehicleType).toBe('unknown');
-      expect(result.regimeContext.paymentEvidence).toEqual([]);
-      expect(result.regimeContext.whyThisVehicleNow).toEqual([]);
-      expect(result.regimeContext.nextSignalAfterBuild).toEqual(memo.recommendedNextStep);
+      if (result.regimeContext.kind !== 'capability') throw new Error('unreachable');
+      expect(result.regimeContext.skillDomain).toBe(memo.rationale[0]);
+      expect(result.regimeContext.currentLevel).toBe('unknown');
+      expect(result.regimeContext.targetLevel).toBe('unknown');
+      expect(result.regimeContext.proofMethod).toBe(memo.recommendedNextStep[0]);
+      expect(result.regimeContext.milestones).toEqual(memo.whatForgeShouldBuild);
     });
 
     it('validates output against ForgeBuildRequestSchema', () => {
       const result = buildForgeBuildRequest(makeBaseMemo(), makeContext());
+      const parsed = ForgeBuildRequestSchema.safeParse(result);
+      expect(parsed.success).toBe(true);
+    });
+
+    it('handles base memo with leverage regime', () => {
+      const memo = makeBaseMemo({ regime: 'leverage' });
+      const result = buildForgeBuildRequest(memo, makeContext());
+
+      expect(result.regimeContext.kind).toBe('leverage');
+      const parsed = ForgeBuildRequestSchema.safeParse(result);
+      expect(parsed.success).toBe(true);
+    });
+
+    it('handles base memo with expression regime', () => {
+      const memo = makeBaseMemo({ regime: 'expression' });
+      const result = buildForgeBuildRequest(memo, makeContext());
+
+      expect(result.regimeContext.kind).toBe('expression');
+      const parsed = ForgeBuildRequestSchema.safeParse(result);
+      expect(parsed.success).toBe(true);
+    });
+
+    it('handles base memo with identity regime', () => {
+      const memo = makeBaseMemo({ regime: 'identity' });
+      const result = buildForgeBuildRequest(memo, makeContext());
+
+      expect(result.regimeContext.kind).toBe('identity');
       const parsed = ForgeBuildRequestSchema.safeParse(result);
       expect(parsed.success).toBe(true);
     });
@@ -275,15 +505,55 @@ describe('buildSyntheticCommitMemo', () => {
     expect(gov.thyraHandoffRequirements).toEqual(['Clear domain', 'Defined participants']);
   });
 
-  it('builds base CommitMemo for non-economic non-governance regime', () => {
+  it('builds capability synthetic CommitMemo from PathCheckResult', () => {
     const pcr = makePathCheckResult();
     const result = buildSyntheticCommitMemo(pcr, 'capability');
 
     expect(result.regime).toBe('capability');
     expect(result.verdict).toBe('commit');
-    expect('buyerHypothesis' in result).toBe(false);
-    expect('selectedWorldForm' in result).toBe(false);
-    expect(result.whatForgeShouldBuild).toContain('Project management tool');
+    expect('skillDomain' in result).toBe(true);
+
+    const cap = result as CapabilityCommitMemo;
+    expect(cap.skillDomain).toBe('freelance-design');
+    expect(cap.proofMethod).toBe('service');
+    expect(cap.milestones).toContain('Project management tool');
+  });
+
+  it('builds leverage synthetic CommitMemo from PathCheckResult', () => {
+    const pcr = makePathCheckResult();
+    const result = buildSyntheticCommitMemo(pcr, 'leverage');
+
+    expect(result.regime).toBe('leverage');
+    expect('leverageType' in result).toBe(true);
+
+    const lev = result as LeverageCommitMemo;
+    expect(lev.leverageType).toBe('service');
+    expect(lev.currentBottleneck).toBe('Automate project tracking');
+  });
+
+  it('builds expression synthetic CommitMemo from PathCheckResult', () => {
+    const pcr = makePathCheckResult();
+    const result = buildSyntheticCommitMemo(pcr, 'expression');
+
+    expect(result.regime).toBe('expression');
+    expect('medium' in result).toBe(true);
+
+    const exp = result as ExpressionCommitMemo;
+    expect(exp.medium).toBe('service');
+    expect(exp.audience).toBe('Freelance designers');
+    expect(exp.coreMessage).toBe('Automate project tracking');
+  });
+
+  it('builds identity synthetic CommitMemo from PathCheckResult', () => {
+    const pcr = makePathCheckResult();
+    const result = buildSyntheticCommitMemo(pcr, 'identity');
+
+    expect(result.regime).toBe('identity');
+    expect('scope' in result).toBe(true);
+
+    const id = result as IdentityCommitMemo;
+    expect(id.scope).toBe('freelance-design');
+    expect(id.coreValues.length).toBeGreaterThan(0);
   });
 
   it('includes unresolved risks from PathCheckResult', () => {

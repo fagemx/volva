@@ -5,6 +5,10 @@ import type {
   RealizationCandidate,
   EconomicCommitMemo,
   GovernanceCommitMemo,
+  CapabilityCommitMemo,
+  LeverageCommitMemo,
+  ExpressionCommitMemo,
+  IdentityCommitMemo,
 } from '../schemas/decision';
 
 function makeCandidate(overrides: Partial<RealizationCandidate> = {}): RealizationCandidate {
@@ -105,17 +109,80 @@ describe('buildCommitMemo', () => {
     });
   });
 
-  describe('unknown/other regime', () => {
-    it('returns base CommitMemo without specialization for capability regime', () => {
-      const candidate = makeCandidate({ regime: 'capability' });
+  describe('capability regime', () => {
+    it('builds CapabilityCommitMemo with all 5 specialized fields', () => {
+      const candidate = makeCandidate({ regime: 'capability', domain: 'data-analysis' });
       const output = makeEvaluatorOutput();
 
       const memo = buildCommitMemo(output, candidate);
 
       expect(memo.regime).toBe('capability');
       expect(memo.candidateId).toBe('cand-1');
-      expect('buyerHypothesis' in memo).toBe(false);
-      expect('selectedWorldForm' in memo).toBe(false);
+      expect('skillDomain' in memo).toBe(true);
+
+      const cap = memo as CapabilityCommitMemo;
+      expect(cap.skillDomain).toBe('data-analysis');
+      expect(cap.currentLevel).toBeDefined();
+      expect(cap.targetLevel).toBeDefined();
+      expect(cap.proofMethod).toBe('service');
+      expect(cap.milestones).toEqual(output.recommendedNextStep);
+    });
+  });
+
+  describe('leverage regime', () => {
+    it('builds LeverageCommitMemo with all 5 specialized fields', () => {
+      const candidate = makeCandidate({ regime: 'leverage' });
+      const output = makeEvaluatorOutput();
+
+      const memo = buildCommitMemo(output, candidate);
+
+      expect(memo.regime).toBe('leverage');
+      expect('leverageType' in memo).toBe(true);
+
+      const lev = memo as LeverageCommitMemo;
+      expect(lev.leverageType).toBe('service');
+      expect(lev.currentBottleneck).toBeDefined();
+      expect(lev.amplificationTarget).toBeDefined();
+      expect(lev.dependencies).toBeDefined();
+      expect(lev.riskIfNotBuilt).toBeDefined();
+    });
+  });
+
+  describe('expression regime', () => {
+    it('builds ExpressionCommitMemo with all 5 specialized fields', () => {
+      const candidate = makeCandidate({ regime: 'expression', domain: 'indie-dev' });
+      const output = makeEvaluatorOutput();
+
+      const memo = buildCommitMemo(output, candidate);
+
+      expect(memo.regime).toBe('expression');
+      expect('medium' in memo).toBe(true);
+
+      const exp = memo as ExpressionCommitMemo;
+      expect(exp.medium).toBe('service');
+      expect(exp.audience).toBe('indie-dev');
+      expect(exp.coreMessage).toBeDefined();
+      expect(exp.styleConstraints).toBeDefined();
+      expect(exp.existingAssets).toBeDefined();
+    });
+  });
+
+  describe('identity regime', () => {
+    it('builds IdentityCommitMemo with all 5 specialized fields', () => {
+      const candidate = makeCandidate({ regime: 'identity', domain: 'engineering-team' });
+      const output = makeEvaluatorOutput();
+
+      const memo = buildCommitMemo(output, candidate);
+
+      expect(memo.regime).toBe('identity');
+      expect('scope' in memo).toBe(true);
+
+      const id = memo as IdentityCommitMemo;
+      expect(id.scope).toBe('engineering-team');
+      expect(id.coreValues).toEqual(candidate.whyThisCandidate);
+      expect(id.tensions).toEqual(output.unresolvedRisks);
+      expect(id.rituals).toEqual(output.recommendedNextStep);
+      expect(id.boundaries).toEqual(candidate.assumptions);
     });
   });
 
