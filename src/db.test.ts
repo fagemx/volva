@@ -20,16 +20,26 @@ describe('DB Layer — initSchema', () => {
     initSchema(db);
   });
 
-  it('creates all 5 tables', () => {
+  it('creates all 13 tables', () => {
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all() as { name: string }[];
     const names = tables.map((t) => t.name);
+    // Core tables
     expect(names).toContain('conversations');
     expect(names).toContain('messages');
     expect(names).toContain('cards');
     expect(names).toContain('card_diffs');
     expect(names).toContain('settlements');
+    // Decision pipeline tables
+    expect(names).toContain('decision_sessions');
+    expect(names).toContain('decision_card_snapshots');
+    expect(names).toContain('candidate_records');
+    expect(names).toContain('probe_records');
+    expect(names).toContain('signal_packets');
+    expect(names).toContain('commit_memo_drafts');
+    expect(names).toContain('promotion_check_drafts');
+    expect(names).toContain('decision_events');
   });
 
   it('is idempotent (can call initSchema twice)', () => {
@@ -197,6 +207,280 @@ describe('DB Layer — initSchema', () => {
     expect(() => {
       db.run(
         "INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES ('s1', 'c1', 'k1', 'village_pack', '{}', 'invalid_status')"
+      );
+    }).toThrow();
+  });
+
+  // ── decision_sessions ──
+
+  it('can insert a decision_session with defaults', () => {
+    db.run(
+      "INSERT INTO decision_sessions (id) VALUES ('ds1')"
+    );
+    const row = db
+      .prepare("SELECT * FROM decision_sessions WHERE id = 'ds1'")
+      .get() as Record<string, unknown>;
+    expect(row.stage).toBe('routing');
+    expect(row.status).toBe('active');
+    expect(row.key_unknowns_json).toBe('[]');
+  });
+
+  it('can insert a decision_session with all fields', () => {
+    db.run(
+      `INSERT INTO decision_sessions (id, conversation_id, user_id, title, primary_regime, secondary_regimes_json, routing_confidence, path_certainty, route_decision, stage, status, key_unknowns_json, current_summary)
+       VALUES ('ds1', 'c1-ref', 'u1', 'Test Session', 'economic', '["capability"]', 0.85, 'high', 'forge-fast-path', 'probe-design', 'paused', '["unknown1"]', 'summary text')`
+    );
+    const row = db
+      .prepare("SELECT * FROM decision_sessions WHERE id = 'ds1'")
+      .get() as Record<string, unknown>;
+    expect(row.primary_regime).toBe('economic');
+    expect(row.path_certainty).toBe('high');
+    expect(row.route_decision).toBe('forge-fast-path');
+    expect(row.stage).toBe('probe-design');
+    expect(row.status).toBe('paused');
+  });
+
+  it('rejects invalid decision_session stage', () => {
+    expect(() => {
+      db.run("INSERT INTO decision_sessions (id, stage) VALUES ('ds1', 'invalid_stage')");
+    }).toThrow();
+  });
+
+  it('rejects invalid decision_session status', () => {
+    expect(() => {
+      db.run("INSERT INTO decision_sessions (id, status) VALUES ('ds1', 'invalid_status')");
+    }).toThrow();
+  });
+
+  it('rejects invalid decision_session primary_regime', () => {
+    expect(() => {
+      db.run("INSERT INTO decision_sessions (id, primary_regime) VALUES ('ds1', 'finance')");
+    }).toThrow();
+  });
+
+  // ── decision_card_snapshots ──
+
+  it('can insert a decision_card_snapshot', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    db.run(
+      "INSERT INTO decision_card_snapshots (id, session_id, kind, version, summary, payload_json) VALUES ('dcs1', 'ds1', 'decision', 1, 'snapshot summary', '{}')"
+    );
+    const row = db
+      .prepare("SELECT * FROM decision_card_snapshots WHERE id = 'dcs1'")
+      .get() as Record<string, unknown>;
+    expect(row.kind).toBe('decision');
+    expect(row.is_current).toBe(1);
+  });
+
+  it('rejects decision_card_snapshot with invalid kind', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    expect(() => {
+      db.run(
+        "INSERT INTO decision_card_snapshots (id, session_id, kind, version, summary, payload_json) VALUES ('dcs1', 'ds1', 'invalid_kind', 1, 'summary', '{}')"
+      );
+    }).toThrow();
+  });
+
+  it('rejects decision_card_snapshot with invalid session_id FK', () => {
+    expect(() => {
+      db.run(
+        "INSERT INTO decision_card_snapshots (id, session_id, kind, version, summary, payload_json) VALUES ('dcs1', 'nonexistent', 'world', 1, 'summary', '{}')"
+      );
+    }).toThrow();
+  });
+
+  // ── candidate_records ──
+
+  it('can insert a candidate_record', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    db.run(
+      "INSERT INTO candidate_records (id, session_id, regime, form, description) VALUES ('cr1', 'ds1', 'economic', 'service', 'A consulting service')"
+    );
+    const row = db
+      .prepare("SELECT * FROM candidate_records WHERE id = 'cr1'")
+      .get() as Record<string, unknown>;
+    expect(row.regime).toBe('economic');
+    expect(row.form).toBe('service');
+    expect(row.status).toBe('generated');
+    expect(row.why_exists_json).toBe('[]');
+  });
+
+  it('rejects candidate_record with invalid regime', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    expect(() => {
+      db.run(
+        "INSERT INTO candidate_records (id, session_id, regime, form, description) VALUES ('cr1', 'ds1', 'finance', 'service', 'desc')"
+      );
+    }).toThrow();
+  });
+
+  it('rejects candidate_record with invalid form', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    expect(() => {
+      db.run(
+        "INSERT INTO candidate_records (id, session_id, regime, form, description) VALUES ('cr1', 'ds1', 'economic', 'app', 'desc')"
+      );
+    }).toThrow();
+  });
+
+  // ── probe_records ──
+
+  it('can insert a probe_record', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    db.run(
+      "INSERT INTO candidate_records (id, session_id, regime, form, description) VALUES ('cr1', 'ds1', 'economic', 'service', 'desc')"
+    );
+    db.run(
+      "INSERT INTO probe_records (id, session_id, candidate_id, regime, hypothesis, judge, probe_form, cheapest_probe) VALUES ('pr1', 'ds1', 'cr1', 'economic', 'People will pay', 'conversion', 'landing_page', 'simple page')"
+    );
+    const row = db
+      .prepare("SELECT * FROM probe_records WHERE id = 'pr1'")
+      .get() as Record<string, unknown>;
+    expect(row.status).toBe('draft');
+    expect(row.hypothesis).toBe('People will pay');
+  });
+
+  it('rejects probe_record with invalid candidate_id FK', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    expect(() => {
+      db.run(
+        "INSERT INTO probe_records (id, session_id, candidate_id, regime, hypothesis, judge, probe_form, cheapest_probe) VALUES ('pr1', 'ds1', 'nonexistent', 'economic', 'h', 'j', 'f', 'c')"
+      );
+    }).toThrow();
+  });
+
+  // ── signal_packets ──
+
+  it('can insert a signal_packet', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    db.run(
+      "INSERT INTO candidate_records (id, session_id, regime, form, description) VALUES ('cr1', 'ds1', 'economic', 'service', 'desc')"
+    );
+    db.run(
+      "INSERT INTO probe_records (id, session_id, candidate_id, regime, hypothesis, judge, probe_form, cheapest_probe) VALUES ('pr1', 'ds1', 'cr1', 'economic', 'h', 'j', 'f', 'c')"
+    );
+    db.run(
+      "INSERT INTO signal_packets (id, probe_id, candidate_id, regime, signal_type, strength, interpretation) VALUES ('sp1', 'pr1', 'cr1', 'economic', 'willingness_to_pay', 'strong', 'clear interest')"
+    );
+    const row = db
+      .prepare("SELECT * FROM signal_packets WHERE id = 'sp1'")
+      .get() as Record<string, unknown>;
+    expect(row.strength).toBe('strong');
+    expect(row.evidence_json).toBe('[]');
+  });
+
+  it('rejects signal_packet with invalid strength', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    db.run(
+      "INSERT INTO candidate_records (id, session_id, regime, form, description) VALUES ('cr1', 'ds1', 'economic', 'service', 'desc')"
+    );
+    db.run(
+      "INSERT INTO probe_records (id, session_id, candidate_id, regime, hypothesis, judge, probe_form, cheapest_probe) VALUES ('pr1', 'ds1', 'cr1', 'economic', 'h', 'j', 'f', 'c')"
+    );
+    expect(() => {
+      db.run(
+        "INSERT INTO signal_packets (id, probe_id, candidate_id, regime, signal_type, strength, interpretation) VALUES ('sp1', 'pr1', 'cr1', 'economic', 'type', 'very_strong', 'interp')"
+      );
+    }).toThrow();
+  });
+
+  // ── commit_memo_drafts ──
+
+  it('can insert a commit_memo_draft', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    db.run(
+      "INSERT INTO candidate_records (id, session_id, regime, form, description) VALUES ('cr1', 'ds1', 'economic', 'service', 'desc')"
+    );
+    db.run(
+      "INSERT INTO commit_memo_drafts (id, session_id, candidate_id, regime, verdict) VALUES ('cm1', 'ds1', 'cr1', 'economic', 'commit')"
+    );
+    const row = db
+      .prepare("SELECT * FROM commit_memo_drafts WHERE id = 'cm1'")
+      .get() as Record<string, unknown>;
+    expect(row.verdict).toBe('commit');
+    expect(row.rationale_json).toBe('[]');
+  });
+
+  it('rejects commit_memo_draft with invalid verdict', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    db.run(
+      "INSERT INTO candidate_records (id, session_id, regime, form, description) VALUES ('cr1', 'ds1', 'economic', 'service', 'desc')"
+    );
+    expect(() => {
+      db.run(
+        "INSERT INTO commit_memo_drafts (id, session_id, candidate_id, regime, verdict) VALUES ('cm1', 'ds1', 'cr1', 'economic', 'approve')"
+      );
+    }).toThrow();
+  });
+
+  // ── promotion_check_drafts ──
+
+  it('can insert a promotion_check_draft', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    db.run(
+      "INSERT INTO promotion_check_drafts (id, session_id, target_type, verdict) VALUES ('pc1', 'ds1', 'arch-spec', 'ready')"
+    );
+    const row = db
+      .prepare("SELECT * FROM promotion_check_drafts WHERE id = 'pc1'")
+      .get() as Record<string, unknown>;
+    expect(row.verdict).toBe('ready');
+    expect(row.blockers_json).toBe('[]');
+  });
+
+  it('rejects promotion_check_draft with invalid target_type', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    expect(() => {
+      db.run(
+        "INSERT INTO promotion_check_drafts (id, session_id, target_type, verdict) VALUES ('pc1', 'ds1', 'invalid_type', 'ready')"
+      );
+    }).toThrow();
+  });
+
+  it('rejects promotion_check_draft with invalid verdict', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    expect(() => {
+      db.run(
+        "INSERT INTO promotion_check_drafts (id, session_id, target_type, verdict) VALUES ('pc1', 'ds1', 'arch-spec', 'approved')"
+      );
+    }).toThrow();
+  });
+
+  // ── decision_events ──
+
+  it('can insert a decision_event', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    db.run(
+      "INSERT INTO decision_events (id, session_id, event_type, object_type, object_id) VALUES ('de1', 'ds1', 'route_assigned', 'session', 'ds1')"
+    );
+    const row = db
+      .prepare("SELECT * FROM decision_events WHERE id = 'de1'")
+      .get() as Record<string, unknown>;
+    expect(row.event_type).toBe('route_assigned');
+    expect(row.payload_json).toBe('{}');
+  });
+
+  it('rejects decision_event with invalid event_type', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    expect(() => {
+      db.run(
+        "INSERT INTO decision_events (id, session_id, event_type, object_type, object_id) VALUES ('de1', 'ds1', 'invalid_event', 'session', 'ds1')"
+      );
+    }).toThrow();
+  });
+
+  it('rejects decision_event with invalid object_type', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    expect(() => {
+      db.run(
+        "INSERT INTO decision_events (id, session_id, event_type, object_type, object_id) VALUES ('de1', 'ds1', 'route_assigned', 'invalid_type', 'ds1')"
+      );
+    }).toThrow();
+  });
+
+  it('rejects decision_event with invalid session_id FK', () => {
+    expect(() => {
+      db.run(
+        "INSERT INTO decision_events (id, session_id, event_type, object_type, object_id) VALUES ('de1', 'nonexistent', 'route_assigned', 'session', 'ds1')"
       );
     }).toThrow();
   });
