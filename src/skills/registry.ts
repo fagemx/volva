@@ -4,7 +4,7 @@ import type { SkillObject, SkillStatus } from '../schemas/skill-object';
 import { parseSkillYamlFile } from './yaml-parser';
 import type { SkillFilter, SkillIndexEntry, ScanResult } from './types';
 
-export type { SkillLookup, SkillMatch } from './types';
+export type { SkillLookup, SkillMatch, SkillObjectLookup } from './types';
 
 const STATUS_ORDER: SkillStatus[] = [
   'draft',
@@ -76,6 +76,11 @@ export class SkillRegistry {
 
   get(id: string): SkillObject | null {
     return this.index.get(id)?.skillObject ?? null;
+  }
+
+  /** Satisfies SkillObjectLookup interface */
+  getSkillObject(skillId: string): SkillObject | null {
+    return this.get(skillId);
   }
 
   list(filter?: SkillFilter): SkillIndexEntry[] {

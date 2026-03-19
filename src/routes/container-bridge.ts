@@ -1,5 +1,5 @@
 import type { Container, ContainerSelection, RoutingContext } from '../containers/types';
-import type { SkillLookup } from '../skills/types';
+import type { SkillLookup, SkillObjectLookup } from '../skills/types';
 import type { ConversationMode } from '../schemas/conversation';
 import { selectContainer, getConfidenceBehavior } from '../containers/router';
 
@@ -48,6 +48,27 @@ const BYPASS_MODES: Set<ConversationMode> = new Set(['world_management']);
  */
 export function shouldBypassContainerRouting(mode: ConversationMode): boolean {
   return BYPASS_MODES.has(mode);
+}
+
+// ─── Karvi Dispatch Check ───
+
+/**
+ * Check if a skill container selection should dispatch to Karvi
+ * instead of executing locally.
+ *
+ * Returns true when:
+ * - primary container is 'skill'
+ * - skillId is present in selection
+ * - skill object exists and has dispatch.mode === 'karvi'
+ */
+export function shouldDispatchToKarvi(
+  selection: ContainerSelection,
+  skillObjectLookup: SkillObjectLookup,
+): boolean {
+  if (selection.primary !== 'skill' || !selection.skillId) return false;
+  const obj = skillObjectLookup.getSkillObject(selection.skillId);
+  if (!obj) return false;
+  return obj.dispatch.mode === 'karvi';
 }
 
 // ─── Main Bridge Function ───
