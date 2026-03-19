@@ -182,4 +182,31 @@ export function initSchema(db: Database): void {
     payload_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
+
+  // ─── Skill Lifecycle Tables ───
+
+  db.run(`CREATE TABLE IF NOT EXISTS skill_instances (
+    id TEXT PRIMARY KEY,
+    skill_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft'
+      CHECK(status IN ('draft','sandbox','promoted','core','deprecated','superseded')),
+    current_stage TEXT NOT NULL DEFAULT 'capture'
+      CHECK(current_stage IN ('capture','crystallize','package','route','execute','verify','learn','govern')),
+    run_count INTEGER NOT NULL DEFAULT 0,
+    success_count INTEGER NOT NULL DEFAULT 0,
+    last_used_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS skill_runs (
+    id TEXT PRIMARY KEY,
+    skill_instance_id TEXT NOT NULL REFERENCES skill_instances(id),
+    conversation_id TEXT,
+    outcome TEXT NOT NULL CHECK(outcome IN ('success','failure','partial')),
+    duration_ms INTEGER,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
 }
