@@ -11,6 +11,7 @@ import { decisionRoutes } from './routes/decisions';
 import { skillRoutes } from './routes/skills';
 import { containerRoutes } from './routes/containers';
 import { dispatchRoutes } from './routes/dispatches';
+import { approvalRoutes } from './routes/approvals';
 import { DecisionSessionManager } from './decision/session-manager';
 import { SkillRegistry } from './skills/registry';
 import { createSkillLookup } from './skills/trigger-matcher';
@@ -37,6 +38,7 @@ app.route('/', decisionRoutes({ db, llm, sessionManager }));
 app.route('/', skillRoutes({ db, llm, registry }));
 app.route('/', containerRoutes({ skillLookup }));
 app.route('/', dispatchRoutes({ karvi, db }));
+app.route('/', approvalRoutes({ db, skillObjectLookup: registry, karviClient: karvi }));
 
 export default {
   port: 3460,

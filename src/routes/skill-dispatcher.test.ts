@@ -281,6 +281,27 @@ describe('dispatchToKarvi', () => {
       expect(result.pendingId).toBe('pending_abc123');
       expect(result.skillName).toBe('deploy-service');
       expect(result.sideEffects).toBe(true);
+      expect(result.executionMode).toBe('active');
+    }
+  });
+
+  it('extracts pendingApprovalId from error details when available', async () => {
+    const client = makeMockKarviClient();
+    client.dispatchSkill.mockRejectedValueOnce(
+      new KarviApiError('APPROVAL_REQUIRED', 'Human approval needed', { pendingApprovalId: 'appr_structured_123' }),
+    );
+
+    const deps: DispatchDeps = {
+      skillObjectLookup: makeLookup(makeSkillObject()),
+      karviClient: client,
+      db,
+      readSkillContent: () => '# SKILL.md',
+    };
+
+    const result = await dispatchToKarvi(makeContext(), deps);
+    expect(result.type).toBe('approval_required');
+    if (result.type === 'approval_required') {
+      expect(result.pendingId).toBe('appr_structured_123');
     }
   });
 

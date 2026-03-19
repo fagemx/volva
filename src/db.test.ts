@@ -20,7 +20,7 @@ describe('DB Layer — initSchema', () => {
     initSchema(db);
   });
 
-  it('creates all 13 tables', () => {
+  it('creates all 14 tables', () => {
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all() as { name: string }[];
@@ -40,6 +40,8 @@ describe('DB Layer — initSchema', () => {
     expect(names).toContain('commit_memo_drafts');
     expect(names).toContain('promotion_check_drafts');
     expect(names).toContain('decision_events');
+    // Approval audit table
+    expect(names).toContain('approval_audits');
   });
 
   it('creates secondary indexes on high-frequency columns', () => {
@@ -52,6 +54,7 @@ describe('DB Layer — initSchema', () => {
     expect(names).toContain('idx_card_diffs_card');
     expect(names).toContain('idx_decision_sessions_status');
     expect(names).toContain('idx_candidate_records_session');
+    expect(names).toContain('idx_approval_audits_pending');
   });
 
   it('is idempotent (can call initSchema twice)', () => {
@@ -524,6 +527,46 @@ describe('DB Layer — initSchema', () => {
         "INSERT INTO decision_events (id, session_id, event_type, object_type, object_id) VALUES ('de1', 'nonexistent', 'route_assigned', 'session', 'ds1')"
       );
     }).toThrow();
+  });
+
+  // ── approval_audits ──
+
+  it('can insert and query an approval audit', () => {
+    db.run(
+      `INSERT INTO approval_audits (id, pending_id, skill_id, skill_name, execution_mode, permissions_json, external_side_effects, dispatch_context_json, decision)
+       VALUES ('a1', 'appr_123', 'skill.deploy', 'deploy', 'destructive', '{}', 1, '{}', 'pending')`,
+    );
+    const row = db
+      .prepare("SELECT * FROM approval_audits WHERE id = 'a1'")
+      .get() as Record<string, unknown>;
+    expect(row.pending_id).toBe('appr_123');
+    expect(row.decision).toBe('pending');
+    expect(row.execution_mode).toBe('destructive');
+    expect(row.external_side_effects).toBe(1);
+  });
+
+  it('rejects invalid approval decision', () => {
+    expect(() => {
+      db.run(
+        `INSERT INTO approval_audits (id, pending_id, skill_id, skill_name, execution_mode, permissions_json, external_side_effects, dispatch_context_json, decision)
+         VALUES ('a2', 'appr_456', 'skill.deploy', 'deploy', 'active', '{}', 0, '{}', 'invalid')`,
+      );
+    }).toThrow();
+  });
+
+  it('can update approval decision', () => {
+    db.run(
+      `INSERT INTO approval_audits (id, pending_id, skill_id, skill_name, execution_mode, permissions_json, external_side_effects, dispatch_context_json, decision)
+       VALUES ('a3', 'appr_789', 'skill.deploy', 'deploy', 'active', '{}', 0, '{}', 'pending')`,
+    );
+    db.run(
+      "UPDATE approval_audits SET decision = 'approved', decided_by = 'alice', decided_at = datetime('now') WHERE id = 'a3'",
+    );
+    const row = db
+      .prepare("SELECT * FROM approval_audits WHERE id = 'a3'")
+      .get() as Record<string, unknown>;
+    expect(row.decision).toBe('approved');
+    expect(row.decided_by).toBe('alice');
   });
 });
 
