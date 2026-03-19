@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { translateToSettlement, buildSyntheticCommitMemo } from './forge-handoff';
+import { buildForgeBuildRequest, buildSyntheticCommitMemo, type ForgeHandoffContext } from './forge-handoff';
+import { ForgeBuildRequestSchema } from '../karvi-client/schemas';
 import type {
   EconomicCommitMemo,
   GovernanceCommitMemo,
@@ -8,6 +9,15 @@ import type {
 } from '../schemas/decision';
 
 // ─── Fixtures ───
+
+function makeContext(overrides?: Partial<ForgeHandoffContext>): ForgeHandoffContext {
+  return {
+    sessionId: 'session-001',
+    workingDir: '/tmp/test',
+    targetRepo: 'test-repo',
+    ...overrides,
+  };
+}
 
 function makeEconomicMemo(overrides?: Partial<EconomicCommitMemo>): EconomicCommitMemo {
   return {
@@ -86,83 +96,143 @@ function makePathCheckResult(overrides?: Partial<PathCheckResult>): PathCheckRes
 
 // ─── Tests ───
 
-describe('translateToSettlement', () => {
+describe('buildForgeBuildRequest', () => {
   describe('economic regime', () => {
-    it('maps EconomicCommitMemo to economic settlement payload', () => {
+    it('maps EconomicCommitMemo to ForgeBuildRequest with economic regimeContext', () => {
       const memo = makeEconomicMemo();
-      const result = translateToSettlement(memo);
+      const ctx = makeContext();
+      const result = buildForgeBuildRequest(memo, ctx);
 
-      expect(result.kind).toBe('economic');
-      if (result.kind !== 'economic') throw new Error('unreachable');
-
-      expect(result.taskSpec.intent).toBe(memo.buyerHypothesis);
-      expect(result.taskSpec.inputs.buyer).toBe(memo.buyerHypothesis);
-      expect(result.taskSpec.inputs.pain).toBe(memo.painHypothesis);
-      expect(result.taskSpec.inputs.vehicle).toBe(memo.whyThisVehicleNow.join(', '));
-      expect(result.taskSpec.constraints).toEqual(memo.whatForgeShouldBuild);
-      expect(result.taskSpec.exclusions).toEqual(memo.whatForgeMustNotBuild);
-      expect(result.taskSpec.success_condition).toBe(memo.nextSignalAfterBuild[0]);
+      expect(result.sessionId).toBe(ctx.sessionId);
+      expect(result.candidateId).toBe(memo.candidateId);
+      expect(result.regime).toBe('economic');
+      expect(result.verdict).toBe('commit');
+      expect(result.whatToBuild).toEqual(memo.whatForgeShouldBuild);
+      expect(result.whatNotToBuild).toEqual(memo.whatForgeMustNotBuild);
+      expect(result.rationale).toEqual(memo.rationale);
+      expect(result.evidenceUsed).toEqual(memo.evidenceUsed);
+      expect(result.unresolvedRisks).toEqual(memo.unresolvedRisks);
     });
 
-    it('maps workflow hints from economic memo', () => {
+    it('includes all 6 economic regimeContext fields', () => {
       const memo = makeEconomicMemo();
-      const result = translateToSettlement(memo);
+      const result = buildForgeBuildRequest(memo, makeContext());
 
-      if (result.kind !== 'economic') throw new Error('unreachable');
+      expect(result.regimeContext.kind).toBe('economic');
+      if (result.regimeContext.kind !== 'economic') throw new Error('unreachable');
 
-      expect(result.workflowHints.name).toBe(`${memo.candidateId}-delivery`);
-      expect(result.workflowHints.purpose).toBe(memo.rationale[0]);
-      expect(result.workflowHints.steps).toEqual(memo.whatForgeShouldBuild);
+      expect(result.regimeContext.buyerHypothesis).toBe(memo.buyerHypothesis);
+      expect(result.regimeContext.painHypothesis).toBe(memo.painHypothesis);
+      expect(result.regimeContext.vehicleType).toBe(memo.whyThisVehicleNow[0]);
+      expect(result.regimeContext.paymentEvidence).toEqual(memo.paymentEvidence);
+      expect(result.regimeContext.whyThisVehicleNow).toEqual(memo.whyThisVehicleNow);
+      expect(result.regimeContext.nextSignalAfterBuild).toEqual(memo.nextSignalAfterBuild);
     });
 
-    it('falls back to rationale when buyerHypothesis is empty', () => {
-      const memo = makeEconomicMemo({ buyerHypothesis: '' });
-      const result = translateToSettlement(memo);
+    it('derives vehicleType from whyThisVehicleNow[0]', () => {
+      const memo = makeEconomicMemo({ whyThisVehicleNow: ['SaaS platform'] });
+      const result = buildForgeBuildRequest(memo, makeContext());
 
-      if (result.kind !== 'economic') throw new Error('unreachable');
-
-      expect(result.taskSpec.intent).toBe(memo.rationale.join('; '));
+      if (result.regimeContext.kind !== 'economic') throw new Error('unreachable');
+      expect(result.regimeContext.vehicleType).toBe('SaaS platform');
     });
 
-    it('falls back success_condition when nextSignalAfterBuild is empty', () => {
-      const memo = makeEconomicMemo({ nextSignalAfterBuild: [] });
-      const result = translateToSettlement(memo);
+    it('falls back vehicleType to unknown when whyThisVehicleNow is empty', () => {
+      const memo = makeEconomicMemo({ whyThisVehicleNow: [] });
+      const result = buildForgeBuildRequest(memo, makeContext());
 
-      if (result.kind !== 'economic') throw new Error('unreachable');
+      if (result.regimeContext.kind !== 'economic') throw new Error('unreachable');
+      expect(result.regimeContext.vehicleType).toBe('unknown');
+    });
 
-      expect(result.taskSpec.success_condition).toBe('First paying customer');
+    it('includes context fields from ForgeHandoffContext', () => {
+      const ctx = makeContext({ workingDir: '/projects/demo', targetRepo: 'org/repo' });
+      const result = buildForgeBuildRequest(makeEconomicMemo(), ctx);
+
+      expect(result.context.workingDir).toBe('/projects/demo');
+      expect(result.context.targetRepo).toBe('org/repo');
+    });
+
+    it('validates output against ForgeBuildRequestSchema', () => {
+      const result = buildForgeBuildRequest(makeEconomicMemo(), makeContext());
+      const parsed = ForgeBuildRequestSchema.safeParse(result);
+      expect(parsed.success).toBe(true);
     });
   });
 
   describe('governance regime', () => {
-    it('maps GovernanceCommitMemo to governance settlement payload', () => {
+    it('maps GovernanceCommitMemo to ForgeBuildRequest with governance regimeContext', () => {
       const memo = makeGovernanceMemo();
-      const result = translateToSettlement(memo);
+      const ctx = makeContext();
+      const result = buildForgeBuildRequest(memo, ctx);
 
-      expect(result.kind).toBe('governance');
-      if (result.kind !== 'governance') throw new Error('unreachable');
+      expect(result.sessionId).toBe(ctx.sessionId);
+      expect(result.candidateId).toBe(memo.candidateId);
+      expect(result.regime).toBe('governance');
+      expect(result.verdict).toBe('commit');
+      expect(result.whatToBuild).toEqual(memo.whatForgeShouldBuild);
+      expect(result.whatNotToBuild).toEqual(memo.whatForgeMustNotBuild);
+    });
 
-      expect(result.villagePack.name).toBe(`world-${memo.selectedWorldForm}-${memo.candidateId.slice(0, 8)}`);
-      expect(result.villagePack.target_repo).toBe('');
-      expect(result.villagePack.worldForm).toBe(memo.selectedWorldForm);
-      expect(result.villagePack.constitutionHints.rules).toEqual(memo.thyraHandoffRequirements);
-      expect(result.villagePack.constitutionHints.allowed_permissions).toEqual([]);
-      expect(result.villagePack.minimumWorldShape).toEqual(memo.minimumWorldShape);
-      expect(result.villagePack.firstCycleDesign).toEqual(memo.firstCycleDesign);
+    it('includes all 6 governance regimeContext fields', () => {
+      const memo = makeGovernanceMemo();
+      const result = buildForgeBuildRequest(memo, makeContext());
+
+      expect(result.regimeContext.kind).toBe('governance');
+      if (result.regimeContext.kind !== 'governance') throw new Error('unreachable');
+
+      expect(result.regimeContext.worldForm).toBe(memo.selectedWorldForm);
+      expect(result.regimeContext.minimumWorldShape).toEqual(memo.minimumWorldShape);
+      expect(result.regimeContext.firstCycleDesign).toEqual(memo.firstCycleDesign);
+      expect(result.regimeContext.stateDensityAssessment).toBe(memo.stateDensityAssessment);
+      expect(result.regimeContext.governancePressureAssessment).toBe(memo.governancePressureAssessment);
+      expect(result.regimeContext.thyraHandoffRequirements).toEqual(memo.thyraHandoffRequirements);
+    });
+
+    it('validates output against ForgeBuildRequestSchema', () => {
+      const result = buildForgeBuildRequest(makeGovernanceMemo(), makeContext());
+      const parsed = ForgeBuildRequestSchema.safeParse(result);
+      expect(parsed.success).toBe(true);
     });
   });
 
   describe('generic fallback', () => {
-    it('maps non-economic non-governance memo to economic payload', () => {
+    it('maps non-economic non-governance memo to ForgeBuildRequest with economic regimeContext', () => {
       const memo = makeBaseMemo();
-      const result = translateToSettlement(memo);
+      const result = buildForgeBuildRequest(memo, makeContext());
 
-      expect(result.kind).toBe('economic');
-      if (result.kind !== 'economic') throw new Error('unreachable');
+      expect(result.regime).toBe('capability');
+      expect(result.regimeContext.kind).toBe('economic');
+      expect(result.whatToBuild).toEqual(memo.whatForgeShouldBuild);
+    });
 
-      expect(result.taskSpec.intent).toBe(memo.rationale.join('; '));
-      expect(result.taskSpec.inputs.regime).toBe('capability');
-      expect(result.taskSpec.constraints).toEqual(memo.whatForgeShouldBuild);
+    it('uses rationale as fallback for economic fields', () => {
+      const memo = makeBaseMemo();
+      const result = buildForgeBuildRequest(memo, makeContext());
+
+      if (result.regimeContext.kind !== 'economic') throw new Error('unreachable');
+      expect(result.regimeContext.buyerHypothesis).toBe(memo.rationale[0]);
+      expect(result.regimeContext.painHypothesis).toBe(memo.rationale.join('; '));
+      expect(result.regimeContext.vehicleType).toBe('unknown');
+      expect(result.regimeContext.paymentEvidence).toEqual([]);
+      expect(result.regimeContext.whyThisVehicleNow).toEqual([]);
+      expect(result.regimeContext.nextSignalAfterBuild).toEqual(memo.recommendedNextStep);
+    });
+
+    it('validates output against ForgeBuildRequestSchema', () => {
+      const result = buildForgeBuildRequest(makeBaseMemo(), makeContext());
+      const parsed = ForgeBuildRequestSchema.safeParse(result);
+      expect(parsed.success).toBe(true);
+    });
+  });
+
+  describe('context handling', () => {
+    it('handles optional context fields', () => {
+      const ctx = makeContext({ workingDir: undefined, targetRepo: undefined });
+      const result = buildForgeBuildRequest(makeEconomicMemo(), ctx);
+
+      expect(result.context.workingDir).toBeUndefined();
+      expect(result.context.targetRepo).toBeUndefined();
     });
   });
 });
