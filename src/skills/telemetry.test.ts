@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Database } from 'bun:sqlite';
 import { createDb, initSchema } from '../db';
-import { recordRun, getMetrics } from './telemetry';
+import { recordRun, recordForgeBuild, getMetrics } from './telemetry';
 
 describe('telemetry', () => {
   let db: Database;
@@ -98,6 +98,125 @@ describe('telemetry', () => {
     it('returns a run id starting with run_', () => {
       const id = recordRun(db, { skillInstanceId: 'si-1', outcome: 'success' });
       expect(id).toMatch(/^run_/);
+    });
+
+    it('stores token and cost telemetry data', () => {
+      const id = recordRun(db, {
+        skillInstanceId: 'si-1',
+        outcome: 'success',
+        durationMs: 1200,
+        tokensUsed: 5000,
+        costUsd: 0.015,
+        runtime: 'claude-code',
+        model: 'claude-sonnet-4-20250514',
+      });
+
+      const row = db
+        .prepare('SELECT tokens_used, cost_usd, runtime, model FROM skill_runs WHERE id = ?')
+        .get(id) as Record<string, unknown>;
+
+      expect(row.tokens_used).toBe(5000);
+      expect(row.cost_usd).toBe(0.015);
+      expect(row.runtime).toBe('claude-code');
+      expect(row.model).toBe('claude-sonnet-4-20250514');
+    });
+
+    it('stores null for omitted telemetry fields', () => {
+      const id = recordRun(db, {
+        skillInstanceId: 'si-1',
+        outcome: 'success',
+      });
+
+      const row = db
+        .prepare('SELECT tokens_used, cost_usd, runtime, model FROM skill_runs WHERE id = ?')
+        .get(id) as Record<string, unknown>;
+
+      expect(row.tokens_used).toBeNull();
+      expect(row.cost_usd).toBeNull();
+      expect(row.runtime).toBeNull();
+      expect(row.model).toBeNull();
+    });
+  });
+
+  describe('recordForgeBuild', () => {
+    beforeEach(() => {
+      db.prepare(
+        `INSERT INTO decision_sessions (id, stage) VALUES (?, ?)`,
+      ).run('sess-1', 'routing');
+    });
+
+    it('inserts a forge build record', () => {
+      const id = recordForgeBuild(db, {
+        sessionId: 'sess-1',
+        regime: 'economic',
+        status: 'success',
+        durationMs: 3000,
+        artifactCount: 2,
+        tokensUsed: 10000,
+        costUsd: 0.05,
+        runtime: 'karvi-worker',
+        model: 'claude-sonnet-4-20250514',
+      });
+
+      const row = db
+        .prepare('SELECT * FROM forge_builds WHERE id = ?')
+        .get(id) as Record<string, unknown>;
+
+      expect(row.session_id).toBe('sess-1');
+      expect(row.regime).toBe('economic');
+      expect(row.status).toBe('success');
+      expect(row.duration_ms).toBe(3000);
+      expect(row.artifact_count).toBe(2);
+      expect(row.tokens_used).toBe(10000);
+      expect(row.cost_usd).toBe(0.05);
+      expect(row.runtime).toBe('karvi-worker');
+      expect(row.model).toBe('claude-sonnet-4-20250514');
+      expect(row.failed_steps_json).toBeNull();
+    });
+
+    it('returns an id starting with forge_', () => {
+      const id = recordForgeBuild(db, {
+        sessionId: 'sess-1',
+        regime: 'economic',
+        status: 'success',
+        artifactCount: 0,
+      });
+      expect(id).toMatch(/^forge_/);
+    });
+
+    it('stores failed steps as JSON', () => {
+      const id = recordForgeBuild(db, {
+        sessionId: 'sess-1',
+        regime: 'governance',
+        status: 'partial',
+        artifactCount: 1,
+        failedSteps: ['step-2: deploy', 'step-3: verify'],
+      });
+
+      const row = db
+        .prepare('SELECT failed_steps_json FROM forge_builds WHERE id = ?')
+        .get(id) as Record<string, unknown>;
+
+      expect(JSON.parse(row.failed_steps_json as string)).toEqual([
+        'step-2: deploy',
+        'step-3: verify',
+      ]);
+    });
+
+    it('stores null for empty failed steps', () => {
+      const id = recordForgeBuild(db, {
+        sessionId: 'sess-1',
+        regime: 'economic',
+        status: 'failure',
+        artifactCount: 0,
+        failedSteps: [],
+      });
+
+      const row = db
+        .prepare('SELECT failed_steps_json FROM forge_builds WHERE id = ?')
+        .get(id) as Record<string, unknown>;
+
+      expect(row.failed_steps_json).toBeNull();
     });
   });
 
