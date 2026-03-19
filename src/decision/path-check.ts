@@ -199,6 +199,68 @@ function getRecommendedNextStep(
   }
 }
 
+// ─── Regime-Specific Route Overrides ───
+
+/**
+ * Regime-specific overrides that can downgrade the route even when
+ * generic element counts would allow a higher certainty.
+ *
+ * For example: governance with form="world" but no world-form detail
+ * should not fast-path even if generic counts look fine.
+ *
+ * Rules from path-check.md Section 12.
+ */
+function applyRegimeOverrides(
+  route: 'space-builder' | 'forge-fast-path' | 'space-builder-then-forge',
+  regime: Regime,
+  fixed: FixedElement[],
+  unresolved: UnresolvedElement[],
+): 'space-builder' | 'forge-fast-path' | 'space-builder-then-forge' {
+  // Only downgrade forge-fast-path; space-builder and space-builder-then-forge stay as-is
+  if (route !== 'forge-fast-path') return route;
+
+  const unresolvedKinds = new Set(unresolved.map((u) => u.kind));
+  // fixed is available for future use but not needed for current override rules
+  void fixed;
+
+  switch (regime) {
+    case 'governance':
+      // Governance MUST have world form fixed for fast-path (Section 12.5)
+      if (unresolvedKinds.has('form')) return 'space-builder-then-forge';
+      // Governance without core cycle cannot fast-path
+      if (unresolvedKinds.has('loop')) return 'space-builder-then-forge';
+      break;
+
+    case 'economic':
+      // Economic MUST have buyer shape for fast-path (Section 12.1)
+      if (unresolvedKinds.has('buyer')) return 'space-builder-then-forge';
+      break;
+
+    case 'capability':
+      // Capability without practice loop cannot fast-path (Section 12.2)
+      if (unresolvedKinds.has('loop')) return 'space-builder-then-forge';
+      break;
+
+    case 'leverage':
+      // Leverage often CAN fast-path if bottleneck is clear (Section 12.3)
+      // No downgrade needed; leverage is the most fast-path-friendly regime
+      break;
+
+    case 'expression':
+      // Expression without medium/format cannot fast-path (Section 12.4)
+      if (unresolvedKinds.has('domain')) return 'space-builder-then-forge';
+      break;
+
+    case 'identity':
+      // Identity almost never fast-paths (Section 12.6)
+      // Even with most elements "fixed", identity should go through
+      // space-builder for staged probe design
+      return 'space-builder-then-forge';
+  }
+
+  return route;
+}
+
 // ─── Main Export ───
 
 /**
@@ -207,6 +269,7 @@ function getRecommendedNextStep(
  * Pure function -- NO LLM call (COND-02 friendly).
  * Analyzes 5 element kinds: domain, form, buyer, loop, build_target.
  * Regime-specific severity rules per path-check.md Section 12.
+ * Regime-specific route overrides per path-check.md Section 12 (C2 addition).
  */
 export function checkPath(
   intentRoute: IntentRoute,
@@ -220,8 +283,21 @@ export function checkPath(
   // Certainty classification (path-check.md Section 10)
   const certainty = classifyCertainty(blockingCount, importantCount);
 
-  // Route decision (path-check.md Section 9)
-  const route = decideRoute(certainty);
+  // Generic route decision (path-check.md Section 9)
+  const genericRoute = decideRoute(certainty);
+
+  // Apply regime-specific overrides (C2 addition)
+  const route = applyRegimeOverrides(
+    genericRoute,
+    intentRoute.primaryRegime,
+    fixed,
+    unresolved,
+  );
+
+  // Recalculate certainty if route was downgraded
+  const effectiveCertainty = route === 'forge-fast-path' ? 'high'
+    : route === 'space-builder' ? 'low'
+    : 'medium';
 
   // Why ready / why not ready explanations
   const whyNotReady = unresolved
@@ -234,7 +310,7 @@ export function checkPath(
   const recommendedNextStep = getRecommendedNextStep(route, unresolved);
 
   return {
-    certainty,
+    certainty: effectiveCertainty,
     route,
     fixedElements: fixed,
     unresolvedElements: unresolved,
