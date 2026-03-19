@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import type { SkillDispatchResult, ForgeBuildResult } from '../karvi-client/schemas';
+import type { Regime } from '../schemas/decision';
 import { recordRun, recordForgeBuild } from './telemetry';
 
 export interface ConsumeSkillOptions {
@@ -86,7 +87,7 @@ export function consumeSkillResult(
 export function consumeForgeResult(
   db: Database,
   result: ForgeBuildResult,
-  regime: string,
+  regime: Regime,
 ): ConsumeForgeOutcome {
   const failedSteps = result.steps
     .filter((s) => s.status === 'failure')

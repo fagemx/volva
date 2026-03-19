@@ -1,4 +1,5 @@
 import type { Database } from 'bun:sqlite';
+import type { Regime } from '../schemas/decision';
 
 export interface RunRecord {
   skillInstanceId: string;
@@ -14,7 +15,7 @@ export interface RunRecord {
 
 export interface ForgeRunRecord {
   sessionId: string;
-  regime: string;
+  regime: Regime;
   status: 'success' | 'failure' | 'partial';
   durationMs?: number;
   artifactCount: number;
