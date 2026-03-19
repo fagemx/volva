@@ -263,6 +263,63 @@ describe('telemetry-consumer', () => {
       expect(row.artifact_count).toBe(1);
     });
 
+    it('records multi-step forge build (3 steps: plan/implement/review)', () => {
+      const multiStepResult = makeForgeResult({
+        steps: [
+          { stepId: 'plan-1', type: 'plan', status: 'success', artifacts: [] },
+          { stepId: 'implement-1', type: 'implement', status: 'success', artifacts: ['/src/main.ts'] },
+          { stepId: 'review-1', type: 'review', status: 'success', artifacts: [] },
+        ],
+        telemetry: {
+          tokensUsed: 30000,
+          costUsd: 0.12,
+          runtime: 'karvi-worker',
+          model: 'claude-sonnet-4-20250514',
+          stepsExecuted: 3,
+        },
+      });
+
+      const { buildId, outcome } = consumeForgeResult(db, multiStepResult, 'economic');
+
+      expect(outcome).toBe('success');
+
+      const row = db
+        .prepare('SELECT * FROM forge_builds WHERE id = ?')
+        .get(buildId) as Record<string, unknown>;
+
+      expect(row.tokens_used).toBe(30000);
+      expect(row.cost_usd).toBe(0.12);
+      expect(row.failed_steps_json).toBeNull();
+    });
+
+    it('records multi-step forge build with partial failure', () => {
+      const multiStepResult = makeForgeResult({
+        status: 'partial',
+        steps: [
+          { stepId: 'plan-1', type: 'plan', status: 'success', artifacts: [] },
+          { stepId: 'implement-1', type: 'implement', status: 'failure', artifacts: [] },
+          { stepId: 'review-1', type: 'review', status: 'skipped', artifacts: [] },
+        ],
+        telemetry: {
+          tokensUsed: 15000,
+          costUsd: 0.06,
+          runtime: 'karvi-worker',
+          model: 'claude-sonnet-4-20250514',
+          stepsExecuted: 3,
+        },
+      });
+
+      const { buildId, outcome } = consumeForgeResult(db, multiStepResult, 'governance');
+
+      expect(outcome).toBe('partial');
+
+      const row = db
+        .prepare('SELECT failed_steps_json FROM forge_builds WHERE id = ?')
+        .get(buildId) as Record<string, unknown>;
+
+      expect(JSON.parse(row.failed_steps_json as string)).toEqual(['implement-1: implement']);
+    });
+
     it('links to decision session via session_id', () => {
       const { buildId } = consumeForgeResult(db, makeForgeResult(), 'economic');
 
