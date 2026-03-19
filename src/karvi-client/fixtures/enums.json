@@ -1,0 +1,5 @@
+{
+  "EXECUTION_MODES": ["advisory", "assistive", "active", "destructive"],
+  "REGIMES": ["economic", "capability", "leverage", "expression", "governance", "identity"],
+  "WORLD_FORMS": ["market", "commons", "town", "port", "night_engine", "managed_knowledge_field"]
+}

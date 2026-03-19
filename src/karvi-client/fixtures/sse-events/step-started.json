@@ -1,0 +1,8 @@
+{
+  "event": "step_started",
+  "data": {
+    "stepId": "step-001",
+    "type": "analyze",
+    "timestamp": "2026-03-19T00:00:00Z"
+  }
+}

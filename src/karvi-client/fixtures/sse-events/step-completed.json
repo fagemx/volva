@@ -1,0 +1,10 @@
+{
+  "event": "step_completed",
+  "data": {
+    "stepId": "step-001",
+    "type": "analyze",
+    "status": "success",
+    "artifacts": ["analysis.md"],
+    "timestamp": "2026-03-19T00:01:00Z"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "sessionId": "session-001",
+  "candidateId": "candidate-001",
+  "regime": "economic",
+  "verdict": "commit",
+  "whatToBuild": ["landing page"],
+  "whatNotToBuild": ["admin panel"],
+  "rationale": ["validated buyer hypothesis"],
+  "evidenceUsed": ["interview notes"],
+  "unresolvedRisks": ["pricing uncertainty"],
+  "regimeContext": {
+    "kind": "economic",
+    "buyerHypothesis": "SMBs need quick setup",
+    "painHypothesis": "manual config is painful",
+    "vehicleType": "SaaS",
+    "paymentEvidence": ["3 LOIs"],
+    "whyThisVehicleNow": ["market timing"],
+    "nextSignalAfterBuild": ["conversion rate"]
+  },
+  "context": {
+    "workingDir": "/tmp/build",
+    "targetRepo": "org/repo"
+  }
+}

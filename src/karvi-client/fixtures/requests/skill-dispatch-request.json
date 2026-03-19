@@ -1,0 +1,42 @@
+{
+  "skillId": "skill.arch-spec",
+  "skillName": "arch-spec",
+  "skillVersion": "0.1.0",
+  "skillContent": "# SKILL.md content",
+  "environment": {
+    "toolsRequired": ["git"],
+    "toolsOptional": [],
+    "permissions": {
+      "filesystem": { "read": true, "write": false },
+      "network": { "read": true, "write": false },
+      "process": { "spawn": false },
+      "secrets": { "read": [] }
+    },
+    "externalSideEffects": false,
+    "executionMode": "advisory"
+  },
+  "dispatch": {
+    "targetSelection": { "repoPolicy": "explicit", "runtimeOptions": ["claude"] },
+    "workerClass": ["review"],
+    "handoff": { "inputArtifacts": [], "outputArtifacts": ["spec_doc"] },
+    "executionPolicy": { "sync": false, "retries": 1, "timeoutMinutes": 20, "escalationOnFailure": false },
+    "approval": { "requireHumanBeforeDispatch": false, "requireHumanBeforeMerge": true }
+  },
+  "verification": {
+    "smokeChecks": ["has-boundaries"],
+    "assertions": [],
+    "humanCheckpoints": ["boundary-review"],
+    "outcomeSignals": []
+  },
+  "context": {
+    "conversationId": "conv-001",
+    "userMessage": "Create architecture spec",
+    "workingDir": "/tmp/work",
+    "inputs": {}
+  },
+  "approvalToken": {
+    "pendingId": "pending-001",
+    "approvedBy": "user@example.com",
+    "approvedAt": "2026-03-19T00:00:00Z"
+  }
+}

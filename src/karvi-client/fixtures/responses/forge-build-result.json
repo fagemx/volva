@@ -1,0 +1,19 @@
+{
+  "sessionId": "session-001",
+  "status": "success",
+  "durationMs": 120000,
+  "artifacts": [
+    { "type": "file", "path": "src/index.ts", "description": "Main entry point" },
+    { "type": "pr", "path": "https://github.com/org/repo/pull/1", "description": "Implementation PR" }
+  ],
+  "steps": [
+    { "stepId": "build-001", "type": "generate", "status": "success", "artifacts": ["src/index.ts"] }
+  ],
+  "telemetry": {
+    "tokensUsed": 50000,
+    "costUsd": 1.50,
+    "runtime": "claude",
+    "model": "claude-3-sonnet",
+    "stepsExecuted": 3
+  }
+}
