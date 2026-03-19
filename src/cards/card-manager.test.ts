@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { Database } from 'bun:sqlite';
-import { CardManager, computeDiff } from './card-manager';
+import { CardManager, CardVersionConflictError, computeDiff } from './card-manager';
 import { createDb, initSchema } from '../db';
 import type { WorldCard } from '../schemas/card';
 
@@ -120,6 +120,31 @@ describe('CardManager.update', () => {
 
   it('throws on non-existent cardId', () => {
     expect(() => mgr.update('nonexistent', minimalWorldCard)).toThrow('Card not found');
+  });
+
+  it('throws CardVersionConflictError on duplicate version insert', () => {
+    const card = mgr.create('conv1', 'world', minimalWorldCard);
+    // Manually insert a row with version=2 to simulate concurrent write
+    db.run(
+      "INSERT INTO cards (id, conversation_id, type, version, content) VALUES (?, 'conv1', 'world', 2, '{}')",
+      [crypto.randomUUID()],
+    );
+    expect(() => mgr.update(card.id, { ...minimalWorldCard, goal: 'conflict' }))
+      .toThrow(CardVersionConflictError);
+  });
+});
+
+// ─── Create Conflict Tests ───
+
+describe('CardManager.create conflict', () => {
+  it('throws CardVersionConflictError on duplicate version=1 insert', () => {
+    // Manually insert a version=1 card to simulate concurrent create
+    db.run(
+      "INSERT INTO cards (id, conversation_id, type, version, content) VALUES (?, 'conv1', 'world', 1, '{}')",
+      [crypto.randomUUID()],
+    );
+    expect(() => mgr.create('conv1', 'world', minimalWorldCard))
+      .toThrow(CardVersionConflictError);
   });
 });
 
