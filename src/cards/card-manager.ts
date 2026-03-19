@@ -1,6 +1,13 @@
 import type { Database } from 'bun:sqlite';
 import type { CardType, AnyCard, CardDiff, CardEnvelope } from '../schemas/card';
 
+export class CardVersionConflictError extends Error {
+  constructor(conversationId: string, version: number) {
+    super(`Card version conflict: conversation=${conversationId}, version=${version}`);
+    this.name = 'CardVersionConflictError';
+  }
+}
+
 export interface DiffEntry {
   id: string;
   cardId: string;
@@ -94,10 +101,17 @@ export class CardManager {
     const now = new Date().toISOString();
     const mergedContent = { ...content, version: 1 };
 
-    this.db.run(
-      'INSERT INTO cards (id, conversation_id, type, version, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, conversationId, type, 1, JSON.stringify(mergedContent), now, now],
-    );
+    try {
+      this.db.run(
+        'INSERT INTO cards (id, conversation_id, type, version, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [id, conversationId, type, 1, JSON.stringify(mergedContent), now, now],
+      );
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('UNIQUE constraint failed')) {
+        throw new CardVersionConflictError(conversationId, 1);
+      }
+      throw err;
+    }
 
     return {
       id,
@@ -138,10 +152,17 @@ export class CardManager {
     );
 
     const newId = crypto.randomUUID();
-    this.db.run(
-      'INSERT INTO cards (id, conversation_id, type, version, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [newId, conversationId, type, newVersion, JSON.stringify(mergedContent), originalCreatedAt, now],
-    );
+    try {
+      this.db.run(
+        'INSERT INTO cards (id, conversation_id, type, version, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [newId, conversationId, type, newVersion, JSON.stringify(mergedContent), originalCreatedAt, now],
+      );
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('UNIQUE constraint failed')) {
+        throw new CardVersionConflictError(conversationId, newVersion);
+      }
+      throw err;
+    }
 
     const diffId = crypto.randomUUID();
     this.db.run(

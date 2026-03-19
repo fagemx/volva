@@ -132,6 +132,23 @@ describe('DB Layer — initSchema', () => {
     expect(JSON.parse(card.content as string)).toHaveProperty('goal', 'test');
   });
 
+  it('rejects duplicate (conversation_id, version) in cards', () => {
+    db.run("INSERT INTO conversations (id, mode) VALUES ('c1', 'world_design')");
+    db.run("INSERT INTO cards (id, conversation_id, type, version, content) VALUES ('k1', 'c1', 'world', 1, '{}')");
+    expect(() => {
+      db.run("INSERT INTO cards (id, conversation_id, type, version, content) VALUES ('k2', 'c1', 'world', 1, '{}')");
+    }).toThrow();
+  });
+
+  it('allows same version across different conversations', () => {
+    db.run("INSERT INTO conversations (id, mode) VALUES ('c1', 'world_design')");
+    db.run("INSERT INTO conversations (id, mode) VALUES ('c2', 'world_design')");
+    db.run("INSERT INTO cards (id, conversation_id, type, version, content) VALUES ('k1', 'c1', 'world', 1, '{}')");
+    expect(() => {
+      db.run("INSERT INTO cards (id, conversation_id, type, version, content) VALUES ('k2', 'c2', 'world', 1, '{}')");
+    }).not.toThrow();
+  });
+
   it('rejects invalid card type', () => {
     db.run("INSERT INTO conversations (id, mode) VALUES ('c1', 'task')");
     expect(() => {

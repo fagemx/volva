@@ -34,7 +34,8 @@ export function initSchema(db: Database): void {
     version INTEGER NOT NULL DEFAULT 1,
     content TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(conversation_id, version)
   )`);
 
   db.run(`CREATE TABLE IF NOT EXISTS card_diffs (
