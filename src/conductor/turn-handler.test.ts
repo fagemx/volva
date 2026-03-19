@@ -380,6 +380,91 @@ describe('handleTurn', () => {
     expect(card!.type).toBe('task');
   });
 
+  it('commerce_design mode creates CommerceCard on first turn', async () => {
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: '設計商品方案' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('好的，讓我們設計商業模式');
+
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'commerce_design', 'explore')");
+    const mgr = new CardManager(db);
+    const result = await handleTurn(mockLlm, mgr, 'conv1', '設計商品方案', 'explore', 'commerce_design');
+
+    expect(result.phase).toBe('explore');
+    expect(result.cardVersion).toBeGreaterThanOrEqual(1);
+
+    const card = mgr.getLatest('conv1');
+    expect(card).not.toBeNull();
+    expect(card!.type).toBe('commerce');
+  });
+
+  it('org_design mode creates OrgCard on first turn', async () => {
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: '組織架構設計' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('好的，讓我們設計組織架構');
+
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'org_design', 'explore')");
+    const mgr = new CardManager(db);
+    const result = await handleTurn(mockLlm, mgr, 'conv1', '組織架構設計', 'explore', 'org_design');
+
+    expect(result.phase).toBe('explore');
+    expect(result.cardVersion).toBeGreaterThanOrEqual(1);
+
+    const card = mgr.getLatest('conv1');
+    expect(card).not.toBeNull();
+    expect(card!.type).toBe('org');
+  });
+
+  it('pipeline_design mode creates PipelineCard on first turn', async () => {
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: '內容產製流水線' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('好的，讓我們設計流水線');
+
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'pipeline_design', 'explore')");
+    const mgr = new CardManager(db);
+    const result = await handleTurn(mockLlm, mgr, 'conv1', '內容產製流水線', 'explore', 'pipeline_design');
+
+    expect(result.phase).toBe('explore');
+    expect(result.cardVersion).toBeGreaterThanOrEqual(1);
+
+    const card = mgr.getLatest('conv1');
+    expect(card).not.toBeNull();
+    expect(card!.type).toBe('pipeline');
+  });
+
+  it('adapter_config mode creates AdapterCard on first turn', async () => {
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: 'discord telegram' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('好的，讓我們配置平台');
+
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'adapter_config', 'explore')");
+    const mgr = new CardManager(db);
+    const result = await handleTurn(mockLlm, mgr, 'conv1', 'discord telegram', 'explore', 'adapter_config');
+
+    // adapter transitions to focus immediately when platforms.length >= 1
+    expect(result.phase).toBe('focus');
+    expect(result.cardVersion).toBeGreaterThanOrEqual(1);
+
+    const card = mgr.getLatest('conv1');
+    expect(card).not.toBeNull();
+    expect(card!.type).toBe('adapter');
+  });
+
   it('auto-detects workflow_design mode on first turn', async () => {
     mockParseIntent.mockResolvedValueOnce({
       ok: true,
