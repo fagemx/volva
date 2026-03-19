@@ -3,9 +3,11 @@ import {
   resolveContainer,
   containerToConversationMode,
   shouldBypassContainerRouting,
+  shouldDispatchToKarvi,
 } from './container-bridge';
-import type { SkillLookup } from '../skills/types';
-import type { RoutingContext } from '../containers/types';
+import type { SkillLookup, SkillObjectLookup } from '../skills/types';
+import type { RoutingContext, ContainerSelection } from '../containers/types';
+import type { SkillObject } from '../schemas/skill-object';
 
 // ─── Helpers ───
 
@@ -23,6 +25,24 @@ function skillLookup(skillId: string): SkillLookup {
 
 function ctx(overrides: Partial<RoutingContext> = {}): RoutingContext {
   return { userMessage: 'hello', ...overrides };
+}
+
+function makeSkillObjectLookup(mode: 'local' | 'karvi' | 'hybrid' | null): SkillObjectLookup {
+  return {
+    getSkillObject: () => mode === null ? null : ({
+      dispatch: { mode },
+    } as unknown as SkillObject),
+  };
+}
+
+function makeSelection(overrides: Partial<ContainerSelection> = {}): ContainerSelection {
+  return {
+    primary: 'skill',
+    confidence: 'high',
+    rationale: 'test',
+    skillId: 'deploy-svc',
+    ...overrides,
+  };
 }
 
 // ─── containerToConversationMode ───
@@ -77,6 +97,40 @@ describe('shouldBypassContainerRouting', () => {
 
   it('returns false for pipeline_design', () => {
     expect(shouldBypassContainerRouting('pipeline_design')).toBe(false);
+  });
+});
+
+// ─── shouldDispatchToKarvi ───
+
+describe('shouldDispatchToKarvi', () => {
+  it('returns true when primary=skill and dispatch.mode=karvi', () => {
+    const selection = makeSelection({ primary: 'skill', skillId: 'deploy-svc' });
+    expect(shouldDispatchToKarvi(selection, makeSkillObjectLookup('karvi'))).toBe(true);
+  });
+
+  it('returns false when primary=skill and dispatch.mode=local', () => {
+    const selection = makeSelection({ primary: 'skill', skillId: 'deploy-svc' });
+    expect(shouldDispatchToKarvi(selection, makeSkillObjectLookup('local'))).toBe(false);
+  });
+
+  it('returns false when primary=skill and dispatch.mode=hybrid', () => {
+    const selection = makeSelection({ primary: 'skill', skillId: 'deploy-svc' });
+    expect(shouldDispatchToKarvi(selection, makeSkillObjectLookup('hybrid'))).toBe(false);
+  });
+
+  it('returns false when primary is not skill', () => {
+    const selection = makeSelection({ primary: 'task', skillId: undefined });
+    expect(shouldDispatchToKarvi(selection, makeSkillObjectLookup('karvi'))).toBe(false);
+  });
+
+  it('returns false when skillId is missing', () => {
+    const selection = makeSelection({ primary: 'skill', skillId: undefined });
+    expect(shouldDispatchToKarvi(selection, makeSkillObjectLookup('karvi'))).toBe(false);
+  });
+
+  it('returns false when skill object not found', () => {
+    const selection = makeSelection({ primary: 'skill', skillId: 'nonexistent' });
+    expect(shouldDispatchToKarvi(selection, makeSkillObjectLookup(null))).toBe(false);
   });
 });
 
