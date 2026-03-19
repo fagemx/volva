@@ -207,7 +207,26 @@ export function initSchema(db: Database): void {
     conversation_id TEXT,
     outcome TEXT NOT NULL CHECK(outcome IN ('success','failure','partial')),
     duration_ms INTEGER,
+    tokens_used INTEGER,
+    cost_usd REAL,
+    runtime TEXT,
+    model TEXT,
     notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS forge_builds (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES decision_sessions(id),
+    regime TEXT NOT NULL CHECK(regime IN ('economic','capability','leverage','expression','governance','identity')),
+    status TEXT NOT NULL CHECK(status IN ('success','failure','partial')),
+    duration_ms INTEGER,
+    artifact_count INTEGER NOT NULL DEFAULT 0,
+    tokens_used INTEGER,
+    cost_usd REAL,
+    runtime TEXT,
+    model TEXT,
+    failed_steps_json TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
 

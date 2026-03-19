@@ -1,11 +1,29 @@
 import type { Database } from 'bun:sqlite';
+import type { Regime } from '../schemas/decision';
 
 export interface RunRecord {
   skillInstanceId: string;
   conversationId?: string;
   outcome: 'success' | 'failure' | 'partial';
   durationMs?: number;
+  tokensUsed?: number;
+  costUsd?: number;
+  runtime?: string;
+  model?: string;
   notes?: string;
+}
+
+export interface ForgeRunRecord {
+  sessionId: string;
+  regime: Regime;
+  status: 'success' | 'failure' | 'partial';
+  durationMs?: number;
+  artifactCount: number;
+  tokensUsed?: number;
+  costUsd?: number;
+  runtime?: string;
+  model?: string;
+  failedSteps?: string[];
 }
 
 export interface SkillMetrics {
@@ -19,14 +37,18 @@ export function recordRun(db: Database, run: RunRecord): string {
   const id = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
   db.prepare(
-    `INSERT INTO skill_runs (id, skill_instance_id, conversation_id, outcome, duration_ms, notes)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO skill_runs (id, skill_instance_id, conversation_id, outcome, duration_ms, tokens_used, cost_usd, runtime, model, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     run.skillInstanceId,
     run.conversationId ?? null,
     run.outcome,
     run.durationMs ?? null,
+    run.tokensUsed ?? null,
+    run.costUsd ?? null,
+    run.runtime ?? null,
+    run.model ?? null,
     run.notes ?? null,
   );
 
@@ -39,6 +61,33 @@ export function recordRun(db: Database, run: RunRecord): string {
       updated_at = datetime('now')
     WHERE id = ?`,
   ).run(successIncrement, run.skillInstanceId);
+
+  return id;
+}
+
+export function recordForgeBuild(db: Database, record: ForgeRunRecord): string {
+  const id = `forge_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  const failedStepsJson = record.failedSteps && record.failedSteps.length > 0
+    ? JSON.stringify(record.failedSteps)
+    : null;
+
+  db.prepare(
+    `INSERT INTO forge_builds (id, session_id, regime, status, duration_ms, artifact_count, tokens_used, cost_usd, runtime, model, failed_steps_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    record.sessionId,
+    record.regime,
+    record.status,
+    record.durationMs ?? null,
+    record.artifactCount,
+    record.tokensUsed ?? null,
+    record.costUsd ?? null,
+    record.runtime ?? null,
+    record.model ?? null,
+    failedStepsJson,
+  );
 
   return id;
 }
