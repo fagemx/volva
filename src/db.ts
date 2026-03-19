@@ -56,4 +56,130 @@ export function initSchema(db: Database): void {
     thyra_response TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
+
+  // ─── Decision Pipeline Tables ───
+
+  db.run(`CREATE TABLE IF NOT EXISTS decision_sessions (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT,
+    user_id TEXT,
+    title TEXT,
+    primary_regime TEXT CHECK(primary_regime IN ('economic','capability','leverage','expression','governance','identity')),
+    secondary_regimes_json TEXT,
+    routing_confidence REAL,
+    path_certainty TEXT CHECK(path_certainty IN ('low','medium','high')),
+    route_decision TEXT CHECK(route_decision IN ('space-builder','space-builder-then-forge','forge-fast-path')),
+    stage TEXT NOT NULL DEFAULT 'routing' CHECK(stage IN ('routing','path-check','space-building','probe-design','probe-review','commit-review','spec-crystallization','promotion-check','done')),
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','promoted','archived')),
+    key_unknowns_json TEXT NOT NULL DEFAULT '[]',
+    current_summary TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS decision_card_snapshots (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES decision_sessions(id),
+    kind TEXT NOT NULL CHECK(kind IN ('world','workflow','task','pipeline','adapter','commerce','org','decision')),
+    version INTEGER NOT NULL,
+    summary TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    is_current INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS candidate_records (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES decision_sessions(id),
+    regime TEXT NOT NULL CHECK(regime IN ('economic','capability','leverage','expression','governance','identity')),
+    form TEXT NOT NULL CHECK(form IN ('service','productized_service','tool','workflow_pack','learning_path','practice_loop','medium','world','operator_model','community_format')),
+    domain TEXT,
+    vehicle TEXT,
+    world_form TEXT CHECK(world_form IN ('market','commons','town','port','night_engine','managed_knowledge_field')),
+    description TEXT NOT NULL,
+    why_exists_json TEXT NOT NULL DEFAULT '[]',
+    assumptions_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'generated' CHECK(status IN ('generated','pruned','probe-ready','probing','hold','committed','discarded')),
+    person_fit TEXT CHECK(person_fit IN ('low','medium','high')),
+    testability TEXT CHECK(testability IN ('low','medium','high')),
+    leverage_potential TEXT CHECK(leverage_potential IN ('low','medium','high')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS probe_records (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES decision_sessions(id),
+    candidate_id TEXT NOT NULL REFERENCES candidate_records(id),
+    regime TEXT NOT NULL CHECK(regime IN ('economic','capability','leverage','expression','governance','identity')),
+    hypothesis TEXT NOT NULL,
+    judge TEXT NOT NULL,
+    probe_form TEXT NOT NULL,
+    cheapest_probe TEXT NOT NULL,
+    disconfirmers_json TEXT NOT NULL DEFAULT '[]',
+    budget_bucket TEXT CHECK(budget_bucket IN ('signal','setup','fulfillment','reserve')),
+    estimated_cost REAL,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','running','completed','cancelled')),
+    started_at TEXT,
+    completed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS signal_packets (
+    id TEXT PRIMARY KEY,
+    probe_id TEXT NOT NULL REFERENCES probe_records(id),
+    candidate_id TEXT NOT NULL REFERENCES candidate_records(id),
+    regime TEXT NOT NULL CHECK(regime IN ('economic','capability','leverage','expression','governance','identity')),
+    signal_type TEXT NOT NULL,
+    strength TEXT NOT NULL CHECK(strength IN ('weak','moderate','strong')),
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    negative_evidence_json TEXT NOT NULL DEFAULT '[]',
+    interpretation TEXT NOT NULL,
+    next_questions_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS commit_memo_drafts (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES decision_sessions(id),
+    candidate_id TEXT NOT NULL REFERENCES candidate_records(id),
+    regime TEXT NOT NULL CHECK(regime IN ('economic','capability','leverage','expression','governance','identity')),
+    verdict TEXT NOT NULL CHECK(verdict IN ('commit','hold','discard')),
+    rationale_json TEXT NOT NULL DEFAULT '[]',
+    evidence_used_json TEXT NOT NULL DEFAULT '[]',
+    unresolved_risks_json TEXT NOT NULL DEFAULT '[]',
+    recommended_next_step_json TEXT NOT NULL DEFAULT '[]',
+    handoff_notes_json TEXT,
+    what_forge_should_build_json TEXT NOT NULL DEFAULT '[]',
+    what_forge_must_not_build_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS promotion_check_drafts (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES decision_sessions(id),
+    target_type TEXT NOT NULL CHECK(target_type IN ('arch-spec','project-plan','thyra-runtime')),
+    target_path TEXT,
+    checklist_results_json TEXT NOT NULL DEFAULT '{}',
+    blockers_json TEXT NOT NULL DEFAULT '[]',
+    verdict TEXT NOT NULL CHECK(verdict IN ('ready','not_ready','partial')),
+    notes_json TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS decision_events (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES decision_sessions(id),
+    event_type TEXT NOT NULL CHECK(event_type IN (
+      'route_assigned','route_changed','path_checked',
+      'candidate_generated','candidate_pruned',
+      'probe_started','probe_completed',
+      'signal_recorded','commit_drafted',
+      'promotion_checked','spec_crystallized'
+    )),
+    object_type TEXT NOT NULL CHECK(object_type IN ('session','card','candidate','probe','signal','commit','promotion')),
+    object_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
 }
