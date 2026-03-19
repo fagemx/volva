@@ -215,7 +215,7 @@ export async function dispatchToKarvi(
           pendingId,
           merged.name,
           merged.environment.executionMode,
-          merged.environment.permissions as unknown as Record<string, unknown>,
+          merged.environment.permissions,
         ));
       }
 

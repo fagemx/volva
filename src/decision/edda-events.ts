@@ -140,7 +140,7 @@ export function buildApprovalRequestedEvent(
   pendingId: string,
   skillName: string,
   executionMode: string,
-  permissions: Record<string, unknown>,
+  permissions: Record<string, unknown> | object,
 ): EddaEvent {
   return {
     eventType: 'approval_requested',

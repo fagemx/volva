@@ -8,8 +8,6 @@ import type { SkillObjectLookup } from '../skills/types';
 import type { KarviClient } from '../karvi-client/client';
 import {
   recordEddaEvent,
-  buildApprovalRequestedEvent,
-  buildApprovalGrantedEvent,
   buildApprovalDeniedEvent,
   buildApprovalExpiredEvent,
 } from '../decision/edda-events';
@@ -88,15 +86,7 @@ export function approvalRoutes(deps: ApprovalDeps): Hono {
       const now = new Date();
       const expiresAt = new Date(now.getTime() + APPROVAL_TTL_MS).toISOString();
 
-      // Record approval_requested event (event also fired in skill-dispatcher, but route-level recording ensures coverage)
-      if (ctx.sessionId) {
-        recordEddaEvent(deps.db, ctx.sessionId, buildApprovalRequestedEvent(
-          outcome.pendingId,
-          outcome.skillName,
-          outcome.executionMode,
-          outcome.permissions as unknown as Record<string, unknown>,
-        ));
-      }
+      // Note: approval_requested event is recorded in skill-dispatcher.ts (single source of truth)
 
       // Persist audit row
       const auditId = `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -188,13 +178,7 @@ export function approvalRoutes(deps: ApprovalDeps): Hono {
     // Reconstruct dispatch context
     const ctx = JSON.parse(row.dispatch_context_json as string) as SkillDispatchContext;
 
-    // Record approval_granted event
-    if (ctx.sessionId) {
-      recordEddaEvent(deps.db, ctx.sessionId, buildApprovalGrantedEvent(
-        pendingId,
-        approvalToken.approvedBy,
-      ));
-    }
+    // Note: approval_granted event is recorded in skill-dispatcher.ts resubmitWithApproval (single source of truth)
 
     // Re-submit with approval
     const outcome = await resubmitWithApproval(ctx, approvalToken, dispatchDeps);
