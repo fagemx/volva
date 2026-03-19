@@ -297,5 +297,8 @@ export type DispatchStatus = z.infer<typeof DispatchStatusSchema>;
 export const CancelResultSchema = z.object({
   id: z.string(),
   cancelled: z.boolean(),
+  status: z.string().optional(),
+  stepsCompleted: z.number().optional(),
+  stepsAborted: z.number().optional(),
 });
 export type CancelResult = z.infer<typeof CancelResultSchema>;
