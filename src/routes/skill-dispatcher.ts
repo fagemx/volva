@@ -8,12 +8,21 @@ import { KarviClient } from '../karvi-client/client';
 import { KarviNetworkError, KarviApiError } from '../karvi-client/schemas';
 import { mergeSkillObject } from '../skills/overlay-merge';
 import { recordRun } from '../skills/telemetry';
+import {
+  recordEddaEvent,
+  buildSkillDispatchedEvent,
+  buildSkillCompletedEvent,
+  buildSkillFailedEvent,
+  buildApprovalRequestedEvent,
+  buildApprovalGrantedEvent,
+} from '../decision/edda-events';
 
 // ─── Types ───
 
 export interface SkillDispatchContext {
   skillId: string;
   conversationId?: string;
+  sessionId?: string;
   userMessage: string;
   workingDir?: string;
   inputs: Record<string, string>;
@@ -135,12 +144,55 @@ export async function dispatchToKarvi(
   try {
     const dispatchResponse = await deps.karviClient.dispatchSkill(request);
 
+    // Record skill_dispatched event
+    if (ctx.sessionId) {
+      recordEddaEvent(deps.db, ctx.sessionId, buildSkillDispatchedEvent(
+        ctx.skillId,
+        dispatchResponse.dispatchId,
+        {
+          conversationId: ctx.conversationId,
+          runtime: merged.dispatch.targetSelection.runtimeOptions[0],
+          estimatedDuration: `${merged.dispatch.executionPolicy.timeoutMinutes} minutes`,
+        },
+      ));
+    }
+
     // 7. Poll for completion
     const result = await pollForCompletion(
       dispatchResponse.dispatchId,
       deps.karviClient,
       merged.dispatch.executionPolicy.timeoutMinutes,
     );
+
+    // Record skill_completed or skill_failed event
+    if (ctx.sessionId) {
+      if (result.status === 'success' || result.status === 'partial') {
+        recordEddaEvent(deps.db, ctx.sessionId, buildSkillCompletedEvent(
+          ctx.skillId,
+          dispatchResponse.dispatchId,
+          {
+            tokensUsed: result.telemetry.tokensUsed,
+            costUsd: result.telemetry.costUsd,
+            durationMs: result.durationMs,
+            runtime: result.telemetry.runtime,
+            model: result.telemetry.model,
+            stepsExecuted: result.telemetry.stepsExecuted,
+          },
+          Object.keys(result.outputs),
+        ));
+      } else {
+        recordEddaEvent(deps.db, ctx.sessionId, buildSkillFailedEvent(
+          ctx.skillId,
+          dispatchResponse.dispatchId,
+          result.verification.failedChecks.join(', ') || 'Dispatch failed',
+          {
+            durationMs: result.durationMs,
+            tokensUsed: result.telemetry.tokensUsed,
+            costUsd: result.telemetry.costUsd,
+          },
+        ));
+      }
+    }
 
     // 8. Record telemetry
     recordRun(deps.db, {
@@ -155,9 +207,21 @@ export async function dispatchToKarvi(
   } catch (error) {
     // Handle APPROVAL_REQUIRED
     if (error instanceof KarviApiError && error.code === 'APPROVAL_REQUIRED') {
+      const pendingId = error.details?.pendingApprovalId ?? error.message;
+
+      // Record approval_requested event
+      if (ctx.sessionId) {
+        recordEddaEvent(deps.db, ctx.sessionId, buildApprovalRequestedEvent(
+          pendingId,
+          merged.name,
+          merged.environment.executionMode,
+          merged.environment.permissions as unknown as Record<string, unknown>,
+        ));
+      }
+
       return {
         type: 'approval_required',
-        pendingId: error.details?.pendingApprovalId ?? error.message,
+        pendingId,
         skillName: merged.name,
         permissions: merged.environment.permissions,
         sideEffects: merged.environment.externalSideEffects,
@@ -206,14 +270,52 @@ export async function resubmitWithApproval(
     approvalToken,
   };
 
+  // Record approval_granted event
+  if (ctx.sessionId) {
+    recordEddaEvent(deps.db, ctx.sessionId, buildApprovalGrantedEvent(
+      approvalToken.pendingId,
+      approvalToken.approvedBy,
+    ));
+  }
+
   try {
     const dispatchResponse = await deps.karviClient.dispatchSkill(request);
+
+    // Record skill_dispatched event
+    if (ctx.sessionId) {
+      recordEddaEvent(deps.db, ctx.sessionId, buildSkillDispatchedEvent(
+        ctx.skillId,
+        dispatchResponse.dispatchId,
+        { conversationId: ctx.conversationId },
+      ));
+    }
 
     const result = await pollForCompletion(
       dispatchResponse.dispatchId,
       deps.karviClient,
       merged.dispatch.executionPolicy.timeoutMinutes,
     );
+
+    // Record skill_completed or skill_failed event
+    if (ctx.sessionId) {
+      if (result.status === 'success' || result.status === 'partial') {
+        recordEddaEvent(deps.db, ctx.sessionId, buildSkillCompletedEvent(
+          ctx.skillId,
+          dispatchResponse.dispatchId,
+          {
+            tokensUsed: result.telemetry.tokensUsed,
+            costUsd: result.telemetry.costUsd,
+            durationMs: result.durationMs,
+          },
+        ));
+      } else {
+        recordEddaEvent(deps.db, ctx.sessionId, buildSkillFailedEvent(
+          ctx.skillId,
+          dispatchResponse.dispatchId,
+          result.verification.failedChecks.join(', ') || 'Dispatch failed',
+        ));
+      }
+    }
 
     recordRun(deps.db, {
       skillInstanceId: ctx.skillId,

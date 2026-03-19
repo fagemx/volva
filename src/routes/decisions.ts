@@ -16,6 +16,12 @@ import { isProbeReady, packageProbe } from '../decision/probe-shell';
 import { buildForgeBuildRequest, type ForgeHandoffContext } from '../decision/forge-handoff';
 import { ForgeBuildResultSchema } from '../karvi-client/schemas';
 import { consumeForgeResult } from '../skills/telemetry-consumer';
+import {
+  recordEddaEvent,
+  buildForgeDispatchedEvent,
+  buildForgeCompletedEvent,
+  buildForgeFailedEvent,
+} from '../decision/edda-events';
 import type {
   IntentRoute,
   PathCheckResult,
@@ -491,6 +497,28 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
       if (deps.karvi) {
         try {
           forgeResult = await deps.karvi.forgeBuild(forgeBuildRequest);
+
+          // Record forge_dispatched event
+          recordEddaEvent(deps.db, session.id, buildForgeDispatchedEvent(
+            forgeResult.buildId,
+            syntheticMemo.regime,
+            syntheticMemo.whatForgeShouldBuild.length,
+          ));
+
+          // Record forge_completed event (fast-path dispatches synchronously)
+          if (forgeResult.status === 'success' || forgeResult.status === 'partial' || forgeResult.status === 'running') {
+            recordEddaEvent(deps.db, session.id, buildForgeCompletedEvent(
+              forgeResult.buildId,
+              syntheticMemo.regime,
+              {},
+            ));
+          } else {
+            recordEddaEvent(deps.db, session.id, buildForgeFailedEvent(
+              forgeResult.buildId,
+              syntheticMemo.regime,
+              `Build status: ${forgeResult.status}`,
+            ));
+          }
         } catch (err) {
           console.error('[forge] karvi.forgeBuild failed (fast-path):', err);
         }
@@ -534,6 +562,30 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
     // Override sessionId to match Volva's decision session (FK constraint)
     const resultWithSessionId = { ...parsed.data, sessionId: id };
     const outcome = consumeForgeResult(deps.db, resultWithSessionId, regime);
+
+    // Record forge event based on outcome
+    if (outcome.outcome === 'success' || outcome.outcome === 'partial') {
+      recordEddaEvent(deps.db, id, buildForgeCompletedEvent(
+        outcome.buildId,
+        regime,
+        {
+          tokensUsed: parsed.data.telemetry.tokensUsed,
+          costUsd: parsed.data.telemetry.costUsd,
+          durationMs: parsed.data.durationMs,
+          runtime: parsed.data.telemetry.runtime,
+          model: parsed.data.telemetry.model,
+          stepsExecuted: parsed.data.telemetry.stepsExecuted,
+        },
+        parsed.data.artifacts.length,
+      ));
+    } else {
+      recordEddaEvent(deps.db, id, buildForgeFailedEvent(
+        outcome.buildId,
+        regime,
+        `Build result: ${outcome.outcome}`,
+        parsed.data.steps.filter((s) => s.status === 'success').length,
+      ));
+    }
 
     return ok(c, { sessionId: id, buildId: outcome.buildId, outcome: outcome.outcome });
   });
