@@ -12,6 +12,12 @@ export interface SkillMatch {
   matchedTriggers: string[];
 }
 
+// ─── DI interface for Skill Object lookup ───
+
+export interface SkillObjectLookup {
+  getSkillObject(skillId: string): SkillObject | null;
+}
+
 // ─── Registry types ───
 
 export interface SkillIndexEntry {
