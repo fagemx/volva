@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Database } from 'bun:sqlite';
 import { ok, error } from './response';
 import type { LLMClient } from '../llm/client';
+import type { KarviClient } from '../karvi-client/client';
 import {
   DecisionSessionManager,
   type DecisionSession,
@@ -12,6 +13,7 @@ import { checkPath, type PathCheckContext } from '../decision/path-check';
 import { buildSpace } from '../decision/space-builder';
 import { applyKillFilters, type KillFilterConstraints } from '../decision/kill-filters';
 import { isProbeReady, packageProbe } from '../decision/probe-shell';
+import { buildForgeBuildRequest, type ForgeHandoffContext } from '../decision/forge-handoff';
 import type {
   IntentRoute,
   PathCheckResult,
@@ -27,6 +29,7 @@ export interface DecisionDeps {
   db: Database;
   llm: LLMClient;
   sessionManager: DecisionSessionManager;
+  karvi?: KarviClient;
 }
 
 // ─── Helpers ───
@@ -470,11 +473,28 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
       return error(c, 'CONFIRMATION_REQUIRED', 'Forge requires confirmation: true (CONTRACT SETTLE-01)', 400);
     }
 
+    // Extract context fields from request body
+    const workingDir = typeof body.workingDir === 'string' ? body.workingDir : undefined;
+    const targetRepo = typeof body.targetRepo === 'string' ? body.targetRepo : undefined;
+
     // Fast-path: forge-fast-path at path-check stage
     if (session.routeDecision === 'forge-fast-path' && session.stage === 'path-check') {
       const syntheticMemo = buildFastPathCommitMemo(session);
       deps.sessionManager.fastPathToDone(session.id);
-      return ok(c, { sessionId: session.id, commitMemo: syntheticMemo, forgeReady: true, fastPath: true, stage: 'done' });
+
+      // Build ForgeBuildRequest and dispatch to Karvi (graceful degradation)
+      const forgeContext: ForgeHandoffContext = { sessionId: session.id, workingDir, targetRepo };
+      const forgeBuildRequest = buildForgeBuildRequest(syntheticMemo, forgeContext);
+      let forgeResult: { buildId: string; status: string; pipeline: string } | null = null;
+      if (deps.karvi) {
+        try {
+          forgeResult = await deps.karvi.forgeBuild(forgeBuildRequest);
+        } catch (err) {
+          console.error('[forge] karvi.forgeBuild failed (fast-path):', err);
+        }
+      }
+
+      return ok(c, { sessionId: session.id, commitMemo: syntheticMemo, forgeBuildRequest, forgeResult, forgeReady: true, fastPath: true, stage: 'done' });
     }
 
     // Normal path: must be at commit-review stage
