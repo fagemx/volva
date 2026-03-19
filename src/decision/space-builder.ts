@@ -14,7 +14,7 @@ type SpaceBuilderContext = {
 
 // ─── Canonical Constants ───
 
-const CANONICAL_VEHICLES = [
+export const ECONOMIC_VEHICLES = [
   'done_for_you_service',
   'done_with_you_install',
   'workflow_audit',
@@ -24,7 +24,7 @@ const CANONICAL_VEHICLES = [
   'operator_model',
 ] as const;
 
-const CANONICAL_WORLD_FORMS = [
+export const GOVERNANCE_WORLD_FORMS = [
   'market',
   'commons',
   'town',
@@ -160,11 +160,11 @@ function buildUserPrompt(
   // Add regime-specific guidance to user prompt
   if (intentRoute.primaryRegime === 'economic') {
     sections.push(
-      `## Available Vehicles\n${CANONICAL_VEHICLES.map((v) => `- ${v}`).join('\n')}`,
+      `## Available Vehicles\n${ECONOMIC_VEHICLES.map((v) => `- ${v}`).join('\n')}`,
     );
   } else if (intentRoute.primaryRegime === 'governance') {
     sections.push(
-      `## Available World Forms\n${CANONICAL_WORLD_FORMS.map((w) => `- ${w}`).join('\n')}`,
+      `## Available World Forms\n${GOVERNANCE_WORLD_FORMS.map((w) => `- ${w}`).join('\n')}`,
     );
   }
 
