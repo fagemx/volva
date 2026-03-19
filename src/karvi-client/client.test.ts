@@ -5,6 +5,8 @@ import {
   KarviNetworkError,
   KarviHttpError,
   KarviValidationError,
+  type SkillDispatchRequest,
+  type ForgeBuildRequest,
 } from './schemas';
 
 function mockFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response>) {
@@ -244,5 +246,204 @@ describe('retry behavior', () => {
     const result = await client.listPipelines();
     expect(attempts).toBe(2);
     expect(result).toHaveLength(1);
+  });
+});
+
+// ─── Dispatch Methods ───
+
+const sampleDispatchRequest: SkillDispatchRequest = {
+  skillId: 'skill.arch-spec',
+  skillName: 'arch-spec',
+  skillVersion: '0.1.0',
+  skillContent: '# SKILL.md content',
+  environment: {
+    toolsRequired: ['git'],
+    toolsOptional: [],
+    permissions: {
+      filesystem: { read: true, write: false },
+      network: { read: true, write: false },
+      process: { spawn: false },
+      secrets: { read: [] },
+    },
+    externalSideEffects: false,
+    executionMode: 'advisory',
+  },
+  dispatch: {
+    targetSelection: { repoPolicy: 'explicit', runtimeOptions: ['claude'] },
+    workerClass: ['review'],
+    handoff: { inputArtifacts: [], outputArtifacts: ['spec_doc'] },
+    executionPolicy: { sync: false, retries: 1, timeoutMinutes: 20, escalationOnFailure: false },
+    approval: { requireHumanBeforeDispatch: false, requireHumanBeforeMerge: true },
+  },
+  verification: {
+    smokeChecks: ['has-boundaries'],
+    assertions: [],
+    humanCheckpoints: ['boundary-review'],
+    outcomeSignals: [],
+  },
+  context: {
+    userMessage: 'Create architecture spec',
+    inputs: {},
+  },
+};
+
+const sampleForgeBuildRequest: ForgeBuildRequest = {
+  sessionId: 'session-001',
+  candidateId: 'candidate-001',
+  regime: 'economic',
+  verdict: 'commit',
+  whatToBuild: ['landing page'],
+  whatNotToBuild: ['admin panel'],
+  rationale: ['validated buyer hypothesis'],
+  evidenceUsed: ['interview notes'],
+  unresolvedRisks: ['pricing uncertainty'],
+  regimeContext: {
+    kind: 'economic',
+    buyerHypothesis: 'SMBs need quick setup',
+    painHypothesis: 'manual config is painful',
+    vehicleType: 'SaaS',
+    paymentEvidence: ['3 LOIs'],
+    whyThisVehicleNow: ['market timing'],
+    nextSignalAfterBuild: ['conversion rate'],
+  },
+  context: {
+    workingDir: '/tmp/build',
+    targetRepo: 'org/repo',
+  },
+};
+
+describe('dispatchSkill', () => {
+  it('POST /api/volva/dispatch-skill with correct body', async () => {
+    let capturedUrl = '';
+    let capturedMethod = '';
+    let capturedBody = '';
+    const client = new KarviClient({
+      fetchFn: mockFetch((url, init) => {
+        capturedUrl = url;
+        capturedMethod = init?.method ?? 'GET';
+        capturedBody = init?.body as string;
+        return jsonResponse({ ok: true, data: { dispatchId: 'disp-123', status: 'pending' } });
+      }),
+    });
+    const result = await client.dispatchSkill(sampleDispatchRequest);
+    expect(capturedUrl).toBe('http://localhost:3464/api/volva/dispatch-skill');
+    expect(capturedMethod).toBe('POST');
+    expect(JSON.parse(capturedBody)).toMatchObject({ skillId: 'skill.arch-spec' });
+    expect(result.dispatchId).toBe('disp-123');
+    expect(result.status).toBe('pending');
+  });
+
+  it('throws KarviApiError on APPROVAL_REQUIRED', async () => {
+    const client = new KarviClient({
+      retries: 0,
+      fetchFn: mockFetch(() =>
+        jsonResponse({ ok: false, error: { code: 'APPROVAL_REQUIRED', message: 'Human approval needed' } })
+      ),
+    });
+    await expect(client.dispatchSkill(sampleDispatchRequest))
+      .rejects.toBeInstanceOf(KarviApiError);
+  });
+});
+
+describe('forgeBuild', () => {
+  it('POST /api/volva/forge-build with correct body', async () => {
+    let capturedUrl = '';
+    let capturedMethod = '';
+    const client = new KarviClient({
+      fetchFn: mockFetch((url, init) => {
+        capturedUrl = url;
+        capturedMethod = init?.method ?? 'GET';
+        return jsonResponse({ ok: true, data: { buildId: 'build-456', status: 'running', pipeline: 'economic-v1' } });
+      }),
+    });
+    const result = await client.forgeBuild(sampleForgeBuildRequest);
+    expect(capturedUrl).toBe('http://localhost:3464/api/volva/forge-build');
+    expect(capturedMethod).toBe('POST');
+    expect(result.buildId).toBe('build-456');
+    expect(result.status).toBe('running');
+    expect(result.pipeline).toBe('economic-v1');
+  });
+
+  it('throws KarviApiError on EMPTY_BUILD', async () => {
+    const client = new KarviClient({
+      retries: 0,
+      fetchFn: mockFetch(() =>
+        jsonResponse({ ok: false, error: { code: 'EMPTY_BUILD', message: 'whatToBuild is empty' } })
+      ),
+    });
+    await expect(client.forgeBuild(sampleForgeBuildRequest))
+      .rejects.toBeInstanceOf(KarviApiError);
+  });
+});
+
+describe('getDispatchStatus', () => {
+  it('GET /api/volva/status/:id returns DispatchStatus', async () => {
+    let capturedUrl = '';
+    let capturedMethod = '';
+    const client = new KarviClient({
+      fetchFn: mockFetch((url, init) => {
+        capturedUrl = url;
+        capturedMethod = init?.method ?? 'GET';
+        return jsonResponse({
+          ok: true,
+          data: {
+            id: 'disp-123',
+            status: 'running',
+            type: 'skill',
+            createdAt: '2026-03-19T00:00:00Z',
+            updatedAt: '2026-03-19T00:01:00Z',
+            result: null,
+          },
+        });
+      }),
+    });
+    const result = await client.getDispatchStatus('disp-123');
+    expect(capturedUrl).toBe('http://localhost:3464/api/volva/status/disp-123');
+    expect(capturedMethod).toBe('GET');
+    expect(result.id).toBe('disp-123');
+    expect(result.status).toBe('running');
+    expect(result.type).toBe('skill');
+    expect(result.result).toBeNull();
+  });
+
+  it('throws KarviApiError on NOT_FOUND', async () => {
+    const client = new KarviClient({
+      retries: 0,
+      fetchFn: mockFetch(() =>
+        jsonResponse({ ok: false, error: { code: 'NOT_FOUND', message: 'Dispatch not found' } })
+      ),
+    });
+    await expect(client.getDispatchStatus('nonexistent'))
+      .rejects.toBeInstanceOf(KarviApiError);
+  });
+});
+
+describe('cancelDispatch', () => {
+  it('POST /api/volva/cancel/:id returns CancelResult', async () => {
+    let capturedUrl = '';
+    let capturedMethod = '';
+    const client = new KarviClient({
+      fetchFn: mockFetch((url, init) => {
+        capturedUrl = url;
+        capturedMethod = init?.method ?? 'GET';
+        return jsonResponse({ ok: true, data: { id: 'disp-123', cancelled: true } });
+      }),
+    });
+    const result = await client.cancelDispatch('disp-123');
+    expect(capturedUrl).toBe('http://localhost:3464/api/volva/cancel/disp-123');
+    expect(capturedMethod).toBe('POST');
+    expect(result.id).toBe('disp-123');
+    expect(result.cancelled).toBe(true);
+  });
+
+  it('throws KarviApiError on ALREADY_CANCELLED', async () => {
+    const client = new KarviClient({
+      retries: 0,
+      fetchFn: mockFetch(() =>
+        jsonResponse({ ok: false, error: { code: 'ALREADY_CANCELLED', message: 'Already cancelled' } })
+      ),
+    });
+    await expect(client.cancelDispatch('disp-123'))
+      .rejects.toBeInstanceOf(KarviApiError);
   });
 });

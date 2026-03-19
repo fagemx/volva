@@ -4,9 +4,15 @@ import {
   type PipelineData,
   type DeletePipelineData,
   type HealthResponse,
+  type SkillDispatchRequest,
+  type ForgeBuildRequest,
+  type DispatchStatus,
+  type CancelResult,
   PipelineDataSchema,
   DeletePipelineDataSchema,
   HealthResponseSchema,
+  DispatchStatusSchema,
+  CancelResultSchema,
   KarviErrorResponseSchema,
   karviSuccess,
   KarviNetworkError,
@@ -45,6 +51,29 @@ export class KarviClient {
 
   async deletePipeline(name: string): Promise<DeletePipelineData> {
     return this.request('DELETE', `/api/pipelines/${name}`, DeletePipelineDataSchema);
+  }
+
+  async dispatchSkill(req: SkillDispatchRequest): Promise<{ dispatchId: string; status: string }> {
+    return this.request('POST', '/api/volva/dispatch-skill', z.object({
+      dispatchId: z.string(),
+      status: z.string(),
+    }), req);
+  }
+
+  async forgeBuild(req: ForgeBuildRequest): Promise<{ buildId: string; status: string; pipeline: string }> {
+    return this.request('POST', '/api/volva/forge-build', z.object({
+      buildId: z.string(),
+      status: z.string(),
+      pipeline: z.string(),
+    }), req);
+  }
+
+  async getDispatchStatus(id: string): Promise<DispatchStatus> {
+    return this.request('GET', `/api/volva/status/${id}`, DispatchStatusSchema);
+  }
+
+  async cancelDispatch(id: string): Promise<CancelResult> {
+    return this.request('POST', `/api/volva/cancel/${id}`, CancelResultSchema);
   }
 
   async getHealth(): Promise<HealthResponse> {
