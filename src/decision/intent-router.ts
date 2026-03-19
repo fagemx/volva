@@ -3,7 +3,7 @@ import { IntentRouteSchema, type IntentRoute } from '../schemas/decision';
 
 // ─── System Prompt ───
 
-export const REGIME_CLASSIFICATION_PROMPT = `You are a terminal-intent classifier for the Volva decision pipeline.
+const REGIME_CLASSIFICATION_PROMPT = `You are a terminal-intent classifier for the Volva decision pipeline.
 
 TASK: Classify the user's terminal intent into exactly one primary regime. Optionally attach secondary regime(s).
 

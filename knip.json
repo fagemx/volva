@@ -20,7 +20,11 @@
     "src/karvi-client/schemas.ts",
     "src/edda-client/client.ts",
     "src/edda-client/schemas.ts",
-    "src/routes/*.ts"
+    "src/routes/*.ts",
+    "src/decision/*.ts",
+    "src/decision/evaluators/*.ts",
+    "src/skills/*.ts",
+    "src/containers/*.ts"
   ],
   "project": [
     "src/**/*.ts"
