@@ -464,6 +464,59 @@ describe('handleTurn', () => {
     expect(card).not.toBeNull();
     expect(card!.type).toBe('world');
   });
+
+  it('falls back to off_topic when parseIntent LLM fails, card state and phase unchanged', async () => {
+    // First turn: create a card with real content
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: '做客服' },
+    });
+    mockGenerateReply.mockResolvedValueOnce('好的');
+
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'world_design', 'explore')");
+    const mgr = new CardManager(db);
+    await handleTurn(mockLlm, mgr, 'conv1', '做客服', 'explore');
+
+    const cardBefore = mgr.getLatest('conv1');
+    expect(cardBefore).not.toBeNull();
+    const versionBefore = cardBefore!.version;
+    const contentBefore = JSON.stringify(cardBefore!.content);
+
+    // Second turn: generateStructured returns {ok: false} (LLM timeout)
+    mockParseIntent.mockResolvedValueOnce({
+      ok: false,
+      error: 'timeout',
+    });
+    mockGenerateReply.mockResolvedValueOnce('抱歉，我不太理解，可以再說一次嗎？');
+
+    const result = await handleTurn(mockLlm, mgr, 'conv1', '隨便講講', 'explore');
+
+    // Should still return a reply (via off_topic fallback)
+    expect(result.reply).toBe('抱歉，我不太理解，可以再說一次嗎？');
+
+    // Intent should be off_topic fallback
+    expect(result.intent.type).toBe('off_topic');
+    expect(result.intent.summary).toBe('隨便講講');
+
+    // Phase should remain unchanged
+    expect(result.phase).toBe('explore');
+    expect(result.phaseChanged).toBe(false);
+
+    // Card content should be unchanged (off_topic does not modify card)
+    const cardAfter = mgr.getLatest('conv1');
+    expect(cardAfter).not.toBeNull();
+    // version increments because CardManager.update always bumps version,
+    // but the meaningful content should be the same
+    expect(cardAfter!.version).toBe(versionBefore + 1);
+    // Strip version from comparison to verify content is unchanged
+    const before = JSON.parse(contentBefore);
+    const after = JSON.parse(JSON.stringify(cardAfter!.content));
+    delete before.version;
+    delete after.version;
+    expect(after).toEqual(before);
+  });
 });
 
 // ─── isDiffEmpty Tests ───
