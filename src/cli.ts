@@ -10,7 +10,8 @@ import type { ConversationMode } from './schemas/conversation';
 import type { WorldCard } from './schemas/card';
 
 async function runCli() {
-  const db = createDb();
+  const dbPath = process.env.VOLVA_DB_PATH || ':memory:';
+  const db = createDb(dbPath);
   initSchema(db);
   const llm = new LLMClient();
   const cardManager = new CardManager(db);
