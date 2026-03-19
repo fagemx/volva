@@ -176,7 +176,8 @@ export function initSchema(db: Database): void {
       'candidate_generated','candidate_pruned',
       'probe_started','probe_completed',
       'signal_recorded','commit_drafted',
-      'promotion_checked','spec_crystallized'
+      'promotion_checked','spec_crystallized',
+      'dispatch_cancelled'
     )),
     object_type TEXT NOT NULL CHECK(object_type IN ('session','card','candidate','probe','signal','commit','promotion')),
     object_id TEXT NOT NULL,

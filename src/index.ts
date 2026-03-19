@@ -10,6 +10,7 @@ import { settlementRoutes } from './routes/settlements';
 import { decisionRoutes } from './routes/decisions';
 import { skillRoutes } from './routes/skills';
 import { containerRoutes } from './routes/containers';
+import { dispatchRoutes } from './routes/dispatches';
 import { DecisionSessionManager } from './decision/session-manager';
 import { SkillRegistry } from './skills/registry';
 import { createSkillLookup } from './skills/trigger-matcher';
@@ -35,6 +36,7 @@ app.route('/', settlementRoutes({ db, cardManager, thyra, karvi }));
 app.route('/', decisionRoutes({ db, llm, sessionManager }));
 app.route('/', skillRoutes({ db, llm, registry }));
 app.route('/', containerRoutes({ skillLookup }));
+app.route('/', dispatchRoutes({ karvi, db }));
 
 export default {
   port: 3460,
