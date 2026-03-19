@@ -210,4 +210,12 @@ export function initSchema(db: Database): void {
     notes TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
+
+  // ─── Secondary Indexes ───
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_cards_conv_version ON cards(conversation_id, version)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_messages_conv_turn ON messages(conversation_id, turn)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_card_diffs_card ON card_diffs(card_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_decision_sessions_status ON decision_sessions(status)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_candidate_records_session ON candidate_records(session_id)');
 }

@@ -42,6 +42,18 @@ describe('DB Layer — initSchema', () => {
     expect(names).toContain('decision_events');
   });
 
+  it('creates secondary indexes on high-frequency columns', () => {
+    const indexes = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%' ORDER BY name")
+      .all() as { name: string }[];
+    const names = indexes.map((i) => i.name);
+    expect(names).toContain('idx_cards_conv_version');
+    expect(names).toContain('idx_messages_conv_turn');
+    expect(names).toContain('idx_card_diffs_card');
+    expect(names).toContain('idx_decision_sessions_status');
+    expect(names).toContain('idx_candidate_records_session');
+  });
+
   it('is idempotent (can call initSchema twice)', () => {
     expect(() => { initSchema(db); }).not.toThrow();
   });
