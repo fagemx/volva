@@ -48,7 +48,7 @@ function createTestApp(llm: LLMClient, thyra: ThyraClient) {
 
   const app = new Hono();
   app.route('/', conversationRoutes({ db, llm, cardManager, thyra }));
-  app.route('/', cardRoutes({ cardManager }));
+  app.route('/', cardRoutes({ db, cardManager }));
   app.route('/', settlementRoutes({ db, cardManager, thyra, karvi }));
 
   return { app, db, cardManager };
@@ -225,7 +225,7 @@ describe('GP-1: Minimum Closed Loop', () => {
     expect(cardData.type).toBe('world');
   });
 
-  it('returns null card before any messages', async () => {
+  it('returns 404 card before any messages', async () => {
     const createRes = await jsonPost(app, '/api/conversations', {});
     const createJson = (await createRes.json()) as Record<string, unknown>;
     const convData = createJson.data as Record<string, unknown>;
@@ -234,9 +234,8 @@ describe('GP-1: Minimum Closed Loop', () => {
     const cardRes = await app.request(`/api/conversations/${id}/card`);
     const cardJson = (await cardRes.json()) as Record<string, unknown>;
 
-    expect(cardRes.status).toBe(200);
-    expect(cardJson.ok).toBe(true);
-    expect(cardJson.data).toBeNull();
+    expect(cardRes.status).toBe(404);
+    expect(cardJson.ok).toBe(false);
   });
 });
 

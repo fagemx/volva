@@ -23,7 +23,7 @@ const sessionManager = new DecisionSessionManager(db);
 const app = new Hono();
 
 app.route('/', conversationRoutes({ db, llm, cardManager, thyra }));
-app.route('/', cardRoutes({ cardManager }));
+app.route('/', cardRoutes({ db, cardManager }));
 app.route('/', settlementRoutes({ db, cardManager, thyra, karvi }));
 app.route('/', decisionRoutes({ db, llm, sessionManager }));
 
