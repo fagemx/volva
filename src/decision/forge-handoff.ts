@@ -6,41 +6,15 @@ import type {
   Regime,
   WorldForm,
 } from '../schemas/decision';
+import { ForgeBuildRequestSchema, type ForgeBuildRequest } from '../karvi-client/schemas';
 
-// ─── Settlement Payload Types ───
+// ─── Context for Forge Handoff ───
 
-type EconomicSettlementPayload = {
-  kind: 'economic';
-  taskSpec: {
-    intent: string;
-    inputs: Record<string, string>;
-    constraints: string[];
-    exclusions: string[];
-    success_condition: string;
-  };
-  workflowHints: {
-    name: string;
-    purpose: string;
-    steps: string[];
-  };
+export type ForgeHandoffContext = {
+  sessionId: string;
+  workingDir?: string;
+  targetRepo?: string;
 };
-
-type GovernanceSettlementPayload = {
-  kind: 'governance';
-  villagePack: {
-    name: string;
-    target_repo: string;
-    worldForm: WorldForm;
-    constitutionHints: {
-      rules: string[];
-      allowed_permissions: string[];
-    };
-    minimumWorldShape: string[];
-    firstCycleDesign: string[];
-  };
-};
-
-export type SettlementPayload = EconomicSettlementPayload | GovernanceSettlementPayload;
 
 // ─── Type Guards ───
 
@@ -54,80 +28,118 @@ function isGovernanceCommitMemo(memo: CommitMemo): memo is GovernanceCommitMemo 
 
 // ─── Economic Translation ───
 
-function translateEconomic(memo: EconomicCommitMemo): EconomicSettlementPayload {
+function buildEconomicRequest(
+  memo: EconomicCommitMemo,
+  context: ForgeHandoffContext,
+): ForgeBuildRequest {
   return {
-    kind: 'economic',
-    taskSpec: {
-      intent: memo.buyerHypothesis || memo.rationale.join('; '),
-      inputs: {
-        buyer: memo.buyerHypothesis || '',
-        pain: memo.painHypothesis || '',
-        vehicle: memo.whyThisVehicleNow.join(', ') || '',
-      },
-      constraints: memo.whatForgeShouldBuild,
-      exclusions: memo.whatForgeMustNotBuild,
-      success_condition: memo.nextSignalAfterBuild[0] || 'First paying customer',
+    sessionId: context.sessionId,
+    candidateId: memo.candidateId,
+    regime: memo.regime,
+    verdict: 'commit',
+    whatToBuild: memo.whatForgeShouldBuild,
+    whatNotToBuild: memo.whatForgeMustNotBuild,
+    rationale: memo.rationale,
+    evidenceUsed: memo.evidenceUsed,
+    unresolvedRisks: memo.unresolvedRisks,
+    regimeContext: {
+      kind: 'economic',
+      buyerHypothesis: memo.buyerHypothesis,
+      painHypothesis: memo.painHypothesis,
+      vehicleType: memo.whyThisVehicleNow[0] || 'unknown',
+      paymentEvidence: memo.paymentEvidence,
+      whyThisVehicleNow: memo.whyThisVehicleNow,
+      nextSignalAfterBuild: memo.nextSignalAfterBuild,
     },
-    workflowHints: {
-      name: `${memo.candidateId}-delivery`,
-      purpose: memo.rationale[0] || 'Economic delivery workflow',
-      steps: memo.whatForgeShouldBuild,
+    context: {
+      workingDir: context.workingDir,
+      targetRepo: context.targetRepo,
     },
   };
 }
 
 // ─── Governance Translation ───
 
-function translateGovernance(memo: GovernanceCommitMemo): GovernanceSettlementPayload {
+function buildGovernanceRequest(
+  memo: GovernanceCommitMemo,
+  context: ForgeHandoffContext,
+): ForgeBuildRequest {
   return {
-    kind: 'governance',
-    villagePack: {
-      name: `world-${memo.selectedWorldForm}-${memo.candidateId.slice(0, 8)}`,
-      target_repo: '',
+    sessionId: context.sessionId,
+    candidateId: memo.candidateId,
+    regime: memo.regime,
+    verdict: 'commit',
+    whatToBuild: memo.whatForgeShouldBuild,
+    whatNotToBuild: memo.whatForgeMustNotBuild,
+    rationale: memo.rationale,
+    evidenceUsed: memo.evidenceUsed,
+    unresolvedRisks: memo.unresolvedRisks,
+    regimeContext: {
+      kind: 'governance',
       worldForm: memo.selectedWorldForm,
-      constitutionHints: {
-        rules: memo.thyraHandoffRequirements,
-        allowed_permissions: [],
-      },
       minimumWorldShape: memo.minimumWorldShape,
       firstCycleDesign: memo.firstCycleDesign,
+      stateDensityAssessment: memo.stateDensityAssessment,
+      governancePressureAssessment: memo.governancePressureAssessment,
+      thyraHandoffRequirements: memo.thyraHandoffRequirements,
+    },
+    context: {
+      workingDir: context.workingDir,
+      targetRepo: context.targetRepo,
     },
   };
 }
 
 // ─── Generic Fallback (non-economic, non-governance regimes) ───
 
-function translateGenericFallback(memo: CommitMemo): EconomicSettlementPayload {
+function buildFallbackRequest(
+  memo: CommitMemo,
+  context: ForgeHandoffContext,
+): ForgeBuildRequest {
   return {
-    kind: 'economic',
-    taskSpec: {
-      intent: memo.rationale.join('; '),
-      inputs: {
-        regime: memo.regime,
-        candidate: memo.candidateId,
-      },
-      constraints: memo.whatForgeShouldBuild,
-      exclusions: memo.whatForgeMustNotBuild,
-      success_condition: memo.recommendedNextStep[0] || 'Deliver first iteration',
+    sessionId: context.sessionId,
+    candidateId: memo.candidateId,
+    regime: memo.regime,
+    verdict: 'commit',
+    whatToBuild: memo.whatForgeShouldBuild,
+    whatNotToBuild: memo.whatForgeMustNotBuild,
+    rationale: memo.rationale,
+    evidenceUsed: memo.evidenceUsed,
+    unresolvedRisks: memo.unresolvedRisks,
+    regimeContext: {
+      kind: 'economic',
+      buyerHypothesis: memo.rationale[0] || '',
+      painHypothesis: memo.rationale.join('; '),
+      vehicleType: 'unknown',
+      paymentEvidence: [],
+      whyThisVehicleNow: [],
+      nextSignalAfterBuild: memo.recommendedNextStep,
     },
-    workflowHints: {
-      name: `${memo.candidateId}-delivery`,
-      purpose: memo.rationale[0] || `${memo.regime} delivery workflow`,
-      steps: memo.whatForgeShouldBuild,
+    context: {
+      workingDir: context.workingDir,
+      targetRepo: context.targetRepo,
     },
   };
 }
 
 // ─── Main Export ───
 
-export function translateToSettlement(commitMemo: CommitMemo): SettlementPayload {
+export function buildForgeBuildRequest(
+  commitMemo: CommitMemo,
+  context: ForgeHandoffContext,
+): ForgeBuildRequest {
+  let request: ForgeBuildRequest;
+
   if (isEconomicCommitMemo(commitMemo)) {
-    return translateEconomic(commitMemo);
+    request = buildEconomicRequest(commitMemo, context);
+  } else if (isGovernanceCommitMemo(commitMemo)) {
+    request = buildGovernanceRequest(commitMemo, context);
+  } else {
+    request = buildFallbackRequest(commitMemo, context);
   }
-  if (isGovernanceCommitMemo(commitMemo)) {
-    return translateGovernance(commitMemo);
-  }
-  return translateGenericFallback(commitMemo);
+
+  // Validate output against schema (CONTRACT: output must match ForgeBuildRequestSchema)
+  return ForgeBuildRequestSchema.parse(request);
 }
 
 // ─── Synthetic CommitMemo for Forge Fast-Path ───
