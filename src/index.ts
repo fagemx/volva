@@ -10,7 +10,8 @@ import { settlementRoutes } from './routes/settlements';
 import { decisionRoutes } from './routes/decisions';
 import { DecisionSessionManager } from './decision/session-manager';
 
-const db = createDb();
+const dbPath = process.env.VOLVA_DB_PATH || ':memory:';
+const db = createDb(dbPath);
 initSchema(db);
 
 const llm = new LLMClient();
