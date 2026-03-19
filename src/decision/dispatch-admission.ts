@@ -68,7 +68,7 @@ export function checkBudget(db: Database, ctx: AdmissionContext): DispatchAdmiss
 // ─── Rate Limit Check ───
 
 export function checkRateLimit(db: Database, ctx: AdmissionContext): DispatchAdmissionResult {
-  // Per-user dispatch rate: count dispatches in last 60 minutes
+  // System-wide dispatch rate: count all dispatches in last 60 minutes
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
   const recentDispatches = db
