@@ -121,6 +121,7 @@ function makeLookup(skillObj: SkillObject | null): SkillObjectLookup {
 function makeMockKarviClient(): KarviClient & {
   dispatchSkill: ReturnType<typeof vi.fn>;
   getDispatchStatus: ReturnType<typeof vi.fn>;
+  cancelDispatch: ReturnType<typeof vi.fn>;
 } {
   const client = {
     dispatchSkill: vi.fn(),
@@ -134,6 +135,7 @@ function makeMockKarviClient(): KarviClient & {
   } as unknown as KarviClient & {
     dispatchSkill: ReturnType<typeof vi.fn>;
     getDispatchStatus: ReturnType<typeof vi.fn>;
+    cancelDispatch: ReturnType<typeof vi.fn>;
   };
   return client;
 }
@@ -368,6 +370,102 @@ describe('dispatchToKarvi', () => {
       .get('skill.deploy-service') as Record<string, unknown>;
     expect(instance.run_count).toBe(1);
     expect(instance.success_count).toBe(1);
+  });
+});
+
+// ─── timeout auto-cancel ───
+
+describe('pollForCompletion auto-cancel on timeout', () => {
+  let db: Database;
+
+  beforeEach(() => {
+    db = createDb(':memory:');
+    initSchema(db);
+  });
+
+  it('calls cancelDispatch when polling times out', async () => {
+    // Insert skill instance for telemetry recording
+    db.prepare(
+      `INSERT INTO skill_instances (id, skill_id, name, status, run_count, success_count)
+       VALUES (?, ?, ?, ?, 0, 0)`,
+    ).run('skill.deploy-service', 'skill.deploy-service', 'deploy-service', 'promoted');
+
+    const client = makeMockKarviClient();
+    client.dispatchSkill.mockResolvedValueOnce({
+      dispatchId: 'dispatch_timeout',
+      status: 'pending',
+    });
+    // Always return 'running' so it times out
+    client.getDispatchStatus.mockResolvedValue({
+      id: 'dispatch_timeout',
+      status: 'running',
+      type: 'skill',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+      result: null,
+    });
+    client.cancelDispatch.mockResolvedValueOnce({ id: 'dispatch_timeout', cancelled: true });
+
+    // Use a skill with very short timeout to avoid slow test
+    const skillObj = makeSkillObject();
+    skillObj.dispatch.executionPolicy.timeoutMinutes = 0; // 0 minutes = 0 poll attempts
+
+    const deps: DispatchDeps = {
+      skillObjectLookup: makeLookup(skillObj),
+      karviClient: client,
+      db,
+      readSkillContent: () => '# SKILL.md',
+    };
+
+    const result = await dispatchToKarvi(makeContext(), deps);
+    expect(result.type).toBe('dispatched');
+    if (result.type === 'dispatched') {
+      expect(result.result.status).toBe('failure');
+      expect(result.result.verification.failedChecks).toContain('timeout');
+    }
+
+    // Verify cancelDispatch was called
+    expect(client.cancelDispatch).toHaveBeenCalledWith('dispatch_timeout');
+  });
+
+  it('still returns timeout result when cancelDispatch fails', async () => {
+    db.prepare(
+      `INSERT INTO skill_instances (id, skill_id, name, status, run_count, success_count)
+       VALUES (?, ?, ?, ?, 0, 0)`,
+    ).run('skill.deploy-service', 'skill.deploy-service', 'deploy-service', 'promoted');
+
+    const client = makeMockKarviClient();
+    client.dispatchSkill.mockResolvedValueOnce({
+      dispatchId: 'dispatch_timeout2',
+      status: 'pending',
+    });
+    client.getDispatchStatus.mockResolvedValue({
+      id: 'dispatch_timeout2',
+      status: 'running',
+      type: 'skill',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+      result: null,
+    });
+    // Cancel itself fails
+    client.cancelDispatch.mockRejectedValueOnce(new Error('Network error'));
+
+    const skillObj = makeSkillObject();
+    skillObj.dispatch.executionPolicy.timeoutMinutes = 0;
+
+    const deps: DispatchDeps = {
+      skillObjectLookup: makeLookup(skillObj),
+      karviClient: client,
+      db,
+      readSkillContent: () => '# SKILL.md',
+    };
+
+    const result = await dispatchToKarvi(makeContext(), deps);
+    expect(result.type).toBe('dispatched');
+    if (result.type === 'dispatched') {
+      expect(result.result.status).toBe('failure');
+      expect(result.result.verification.failedChecks).toContain('timeout');
+    }
   });
 });
 

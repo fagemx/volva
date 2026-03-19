@@ -436,6 +436,29 @@ describe('cancelDispatch', () => {
     expect(result.cancelled).toBe(true);
   });
 
+  it('parses full spec response with status, stepsCompleted, stepsAborted', async () => {
+    const client = new KarviClient({
+      fetchFn: mockFetch(() =>
+        jsonResponse({
+          ok: true,
+          data: {
+            id: 'disp-456',
+            cancelled: true,
+            status: 'cancelled',
+            stepsCompleted: 1,
+            stepsAborted: 2,
+          },
+        })
+      ),
+    });
+    const result = await client.cancelDispatch('disp-456');
+    expect(result.id).toBe('disp-456');
+    expect(result.cancelled).toBe(true);
+    expect(result.status).toBe('cancelled');
+    expect(result.stepsCompleted).toBe(1);
+    expect(result.stepsAborted).toBe(2);
+  });
+
   it('throws KarviApiError on ALREADY_CANCELLED', async () => {
     const client = new KarviClient({
       retries: 0,
@@ -444,6 +467,17 @@ describe('cancelDispatch', () => {
       ),
     });
     await expect(client.cancelDispatch('disp-123'))
+      .rejects.toBeInstanceOf(KarviApiError);
+  });
+
+  it('throws KarviApiError on NOT_FOUND', async () => {
+    const client = new KarviClient({
+      retries: 0,
+      fetchFn: mockFetch(() =>
+        jsonResponse({ ok: false, error: { code: 'NOT_FOUND', message: 'Dispatch not found' } })
+      ),
+    });
+    await expect(client.cancelDispatch('nonexistent'))
       .rejects.toBeInstanceOf(KarviApiError);
   });
 });

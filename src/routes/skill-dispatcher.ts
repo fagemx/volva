@@ -266,7 +266,13 @@ async function pollForCompletion(
     await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
   }
 
-  // Timeout
+  // Timeout — best-effort cancel on Karvi side
+  try {
+    await client.cancelDispatch(dispatchId);
+  } catch {
+    // Karvi may already be done or unreachable — non-fatal
+  }
+
   return {
     skillId: '',
     status: 'failure',

@@ -488,6 +488,18 @@ describe('DB Layer — initSchema', () => {
     expect(row.payload_json).toBe('{}');
   });
 
+  it('accepts dispatch_cancelled event_type', () => {
+    db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
+    db.run(
+      "INSERT INTO decision_events (id, session_id, event_type, object_type, object_id, payload_json) VALUES ('de2', 'ds1', 'dispatch_cancelled', 'session', 'disp-001', '{\"reason\":\"user_cancel\"}')"
+    );
+    const row = db
+      .prepare("SELECT * FROM decision_events WHERE id = 'de2'")
+      .get() as Record<string, unknown>;
+    expect(row.event_type).toBe('dispatch_cancelled');
+    expect(row.object_id).toBe('disp-001');
+  });
+
   it('rejects decision_event with invalid event_type', () => {
     db.run("INSERT INTO decision_sessions (id) VALUES ('ds1')");
     expect(() => {
