@@ -231,6 +231,24 @@ export function initSchema(db: Database): void {
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
 
+  // ─── Approval Audit Table ───
+
+  db.run(`CREATE TABLE IF NOT EXISTS approval_audits (
+    id TEXT PRIMARY KEY,
+    pending_id TEXT NOT NULL,
+    skill_id TEXT NOT NULL,
+    skill_name TEXT NOT NULL,
+    execution_mode TEXT NOT NULL,
+    permissions_json TEXT NOT NULL,
+    external_side_effects INTEGER NOT NULL,
+    dispatch_context_json TEXT NOT NULL,
+    decision TEXT NOT NULL DEFAULT 'pending'
+      CHECK(decision IN ('pending','approved','denied','expired')),
+    decided_by TEXT,
+    decided_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
   // ─── Secondary Indexes ───
 
   db.run('CREATE INDEX IF NOT EXISTS idx_cards_conv_version ON cards(conversation_id, version)');
@@ -238,4 +256,5 @@ export function initSchema(db: Database): void {
   db.run('CREATE INDEX IF NOT EXISTS idx_card_diffs_card ON card_diffs(card_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_decision_sessions_status ON decision_sessions(status)');
   db.run('CREATE INDEX IF NOT EXISTS idx_candidate_records_session ON candidate_records(session_id)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_approval_audits_pending ON approval_audits(pending_id)');
 }

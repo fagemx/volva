@@ -106,7 +106,15 @@ export class KarviClient {
     // Check for error response first
     const errorParsed = KarviErrorResponseSchema.safeParse(json);
     if (errorParsed.success) {
-      throw new KarviApiError(errorParsed.data.error.code, errorParsed.data.error.message);
+      const details: Record<string, string> = {};
+      if (errorParsed.data.error.pendingApprovalId) {
+        details.pendingApprovalId = errorParsed.data.error.pendingApprovalId;
+      }
+      throw new KarviApiError(
+        errorParsed.data.error.code,
+        errorParsed.data.error.message,
+        Object.keys(details).length > 0 ? details : undefined,
+      );
     }
 
     // Parse success response
