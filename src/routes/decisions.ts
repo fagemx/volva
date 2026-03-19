@@ -14,6 +14,8 @@ import { buildSpace } from '../decision/space-builder';
 import { applyKillFilters, type KillFilterConstraints } from '../decision/kill-filters';
 import { isProbeReady, packageProbe } from '../decision/probe-shell';
 import { buildForgeBuildRequest, type ForgeHandoffContext } from '../decision/forge-handoff';
+import { ForgeBuildResultSchema } from '../karvi-client/schemas';
+import { consumeForgeResult } from '../skills/telemetry-consumer';
 import type {
   IntentRoute,
   PathCheckResult,
@@ -509,6 +511,31 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
     deps.sessionManager.updateSession(session.id, { status: 'promoted' });
 
     return ok(c, { sessionId: session.id, forgeReady: true, fastPath: false, stage: 'done' });
+  });
+
+  // ─── POST /api/decisions/:id/forge-result ───
+  // Record forge build result telemetry (0 LLM calls)
+  app.post('/api/decisions/:id/forge-result', async (c) => {
+    const id = c.req.param('id');
+    const session = deps.sessionManager.getSession(id);
+
+    if (!session) return error(c, 'NOT_FOUND', 'Session not found', 404);
+    if (session.stage !== 'done') {
+      return error(c, 'INVALID_STAGE', `Expected done, got ${session.stage}`, 400);
+    }
+
+    const body: Record<string, unknown> = await c.req.json();
+    const parsed = ForgeBuildResultSchema.safeParse(body);
+    if (!parsed.success) {
+      return error(c, 'INVALID_INPUT', `Invalid ForgeBuildResult: ${parsed.error.message}`, 400);
+    }
+
+    const regime = session.primaryRegime ?? 'economic';
+    // Override sessionId to match Volva's decision session (FK constraint)
+    const resultWithSessionId = { ...parsed.data, sessionId: id };
+    const outcome = consumeForgeResult(deps.db, resultWithSessionId, regime);
+
+    return ok(c, { sessionId: id, buildId: outcome.buildId, outcome: outcome.outcome });
   });
 
   // ─── GET /api/decisions ───
