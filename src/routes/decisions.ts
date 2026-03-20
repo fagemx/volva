@@ -606,10 +606,7 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
     const forgeContext: ForgeHandoffContext = { sessionId: session.id, workingDir, targetRepo };
     const forgeBuildRequest = buildForgeBuildRequest(commitMemo, forgeContext);
 
-    let forgeResult: ForgeBuildDispatchData | null = null;
-    try {
-      forgeResult = await deps.karvi.forgeBuild(forgeBuildRequest);
-    } catch (err) {
+    const forgeResult = await deps.karvi.forgeBuild(forgeBuildRequest).catch((err: unknown) => {
       if (
         typeof err === 'object'
         && err !== null
@@ -618,14 +615,12 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
         && typeof (err as { code: unknown }).code === 'string'
         && typeof (err as { message: unknown }).message === 'string'
       ) {
-        return error(
-          c,
-          (err as { code: string }).code,
-          (err as { message: string }).message,
-          400,
-        );
+        return { _error: true as const, code: (err as { code: string }).code, message: (err as { message: string }).message, status: 400 as const };
       }
-      return error(c, 'KARVI_UNAVAILABLE', 'Failed to dispatch forge build to Karvi', 503);
+      return { _error: true as const, code: 'KARVI_UNAVAILABLE', message: 'Failed to dispatch forge build to Karvi', status: 503 as const };
+    });
+    if ('_error' in forgeResult) {
+      return error(c, forgeResult.code, forgeResult.message, forgeResult.status);
     }
 
     // Advance to done via remaining stages

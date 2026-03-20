@@ -100,7 +100,7 @@ export function createMockKarviServer(): MockKarviServer {
   return {
     url: `http://localhost:${server.port}`,
     state,
-    stop: () => server.stop(),
+    stop: () => { void server.stop(); },
     simulateProgress(id: string) {
       const dispatch = state.dispatches.get(id);
       if (dispatch && dispatch.status === 'pending') {
