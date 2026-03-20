@@ -4,13 +4,14 @@ import { parseIntent } from '../llm/intent-parser';
 import { generateReply } from '../llm/response-gen';
 import { checkTransition, type Phase } from './state-machine';
 import { pickStrategy } from './rhythm';
-import type { AnyCard, CardType, CardDiff } from '../schemas/card';
+import type { AnyCard, CardType, CardDiff, CardEnvelope } from '../schemas/card';
 import type { Intent } from '../schemas/intent';
 import type { Strategy } from '../llm/prompts';
 import type { ConversationMode } from '../schemas/conversation';
 import type { SkillData } from '../thyra-client/schemas';
 import { createEmptyCard, modeToCardType } from './card-factories';
-import { applyIntent } from './card-mutations';
+import { applyIntent, applyIntentToCards } from './card-mutations';
+import { detectConflicts, formatConflictMessage, type Conflict } from './conflict-detector';
 
 // Re-export everything from card-factories and card-mutations for backward compatibility
 export {
@@ -43,8 +44,10 @@ export interface TurnResult {
   phaseChanged: boolean;
   strategy: Strategy;
   cardVersion: number;
+  cardVersions: Map<CardType, number>;
   detectedMode?: ConversationMode;
   nomodStreak: number;
+  conflicts: Conflict[];
 }
 
 export function isDiffEmpty(diff: CardDiff): boolean {
@@ -86,15 +89,15 @@ export async function handleTurn(
   nomodStreak = 0,
   availableSkills?: SkillData[],
 ): Promise<TurnResult> {
-  const currentCard = cardManager.getLatest(conversationId);
-  const isFirstTurn = !currentCard;
-  const cardContent = currentCard ? currentCard.content : createEmptyCard(mode);
-  const cardSnapshot = JSON.stringify(cardContent, null, 2);
+  const activeCards = cardManager.getActiveCards(conversationId);
+  const isFirstTurn = activeCards.size === 0;
 
-  // LLM #1: parse intent
-  const intent = await parseIntent(llm, userMessage, cardSnapshot);
+  const cardSnapshots = Array.from(activeCards.entries())
+    .map(([type, card]) => `[${type}]: ${JSON.stringify(card.content, null, 2)}`)
+    .join('\n\n');
 
-  // Auto-detect mode on first turn if LLM returned detected_mode
+  const intent = await parseIntent(llm, userMessage, cardSnapshots || '(no cards yet)');
+
   let effectiveMode = mode;
   let detectedMode: ConversationMode | undefined;
   if (isFirstTurn && intent.detected_mode) {
@@ -102,34 +105,74 @@ export async function handleTurn(
     detectedMode = intent.detected_mode;
   }
 
-  const cardType = modeToCardType(effectiveMode);
-  const effectiveCardContent = isFirstTurn ? createEmptyCard(effectiveMode) : cardContent;
+  const primaryCardType = modeToCardType(effectiveMode);
 
-  // Update card content based on intent
-  const updatedContent = applyIntent(cardType, effectiveCardContent, intent);
-
-  // Persist card and compute diff-based nomod streak
-  let cardVersion: number;
-  let newNomodStreak: number;
-  if (currentCard) {
-    const { card, diff } = cardManager.update(currentCard.id, updatedContent);
-    cardVersion = card.version;
-    newNomodStreak = isDiffEmpty(diff) ? nomodStreak + 1 : 0;
-  } else {
-    const card = cardManager.create(conversationId, cardType, updatedContent);
-    cardVersion = card.version;
-    newNomodStreak = 0;
+  if (isFirstTurn) {
+    const emptyCard = createEmptyCard(effectiveMode);
+    cardManager.create(conversationId, primaryCardType, emptyCard);
+    activeCards.set(primaryCardType, {
+      id: '',
+      conversationId,
+      type: primaryCardType,
+      content: emptyCard,
+      version: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
   }
 
-  // Check state transition
-  const transition = checkTransition(currentPhase, cardType, updatedContent, intent.type, newNomodStreak);
+  const activeCardsContent = new Map<CardType, AnyCard>();
+  for (const [type, envelope] of activeCards) {
+    activeCardsContent.set(type, envelope.content);
+  }
 
-  // Pick reply strategy
-  const hasPending = cardHasPending(cardType, updatedContent);
+  const updatedCards = applyIntentToCards(activeCardsContent, intent);
+
+  const cardVersions = new Map<CardType, number>();
+  let newNomodStreak = nomodStreak;
+  let anyChanges = false;
+
+  for (const [cardType, updatedContent] of updatedCards) {
+    const existingEnvelope = activeCards.get(cardType);
+    if (existingEnvelope && existingEnvelope.id) {
+      const { card, diff } = cardManager.update(existingEnvelope.id, updatedContent);
+      cardVersions.set(cardType, card.version);
+      if (!isDiffEmpty(diff)) {
+        anyChanges = true;
+      }
+    } else {
+      const card = cardManager.create(conversationId, cardType, updatedContent);
+      cardVersions.set(cardType, card.version);
+      anyChanges = true;
+    }
+  }
+
+  if (anyChanges) {
+    newNomodStreak = 0;
+  } else {
+    newNomodStreak = nomodStreak + 1;
+  }
+
+  const conflicts = detectConflicts(updatedCards);
+  const conflictMessage = formatConflictMessage(conflicts);
+
+  const primaryCard = updatedCards.get(primaryCardType);
+  const transition = primaryCard
+    ? checkTransition(currentPhase, primaryCardType, primaryCard, intent.type, newNomodStreak)
+    : { newPhase: currentPhase, reason: null };
+
+  const hasPending = primaryCard ? cardHasPending(primaryCardType, primaryCard) : false;
   const strategy = pickStrategy(transition.newPhase, intent.type, hasPending, effectiveMode);
 
-  // LLM #2: generate reply
-  const reply = await generateReply(llm, strategy, JSON.stringify(updatedContent, null, 2), userMessage, availableSkills);
+  const cardsJson = Array.from(updatedCards.entries())
+    .map(([type, card]) => `[${type}]: ${JSON.stringify(card, null, 2)}`)
+    .join('\n\n');
+
+  let reply = await generateReply(llm, strategy, cardsJson, userMessage, availableSkills);
+
+  if (conflictMessage) {
+    reply = `${reply}\n\n${conflictMessage}`;
+  }
 
   return {
     reply,
@@ -137,8 +180,10 @@ export async function handleTurn(
     phase: transition.newPhase,
     phaseChanged: transition.reason !== null,
     strategy,
-    cardVersion,
+    cardVersion: cardVersions.get(primaryCardType) || 1,
+    cardVersions,
     ...(detectedMode !== undefined && { detectedMode }),
     nomodStreak: newNomodStreak,
+    conflicts,
   };
 }

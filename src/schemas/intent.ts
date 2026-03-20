@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ConversationMode } from './conversation';
+import { CardTypeEnum } from './card';
 
 export const IntentType = z.enum([
   'new_intent',
@@ -21,6 +22,7 @@ export type IntentType = z.infer<typeof IntentType>;
 export const IntentSchema = z.object({
   type: IntentType,
   summary: z.string(),
+  target_cards: z.array(CardTypeEnum).optional(),
   entities: z.record(z.string()).optional(),
   enforcement: z.enum(['hard', 'soft']).optional(),
   signals: z.array(z.string()).optional(),
