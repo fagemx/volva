@@ -49,6 +49,7 @@ function createFakeKarviServer() {
   let buildCounter = 0;
 
   const fetchFn = (async (url: string, init?: RequestInit): Promise<Response> => {
+    await Promise.resolve();
     const method = init?.method ?? 'GET';
 
     if (url.endsWith('/api/volva/forge-build') && method === 'POST') {

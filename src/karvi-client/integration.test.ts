@@ -166,19 +166,19 @@ describe('Skill Dispatch Integration (GH-155)', () => {
       );
     });
 
-    it('KC2: Karvi uses skillContent (not filesystem)', async () => {
+    it('KC2: Karvi uses skillContent (not filesystem)', () => {
       const received = server.state.receivedRequests[server.state.receivedRequests.length - 1];
       expect(received.skillContent).toBe(goldenPathRequest.skillContent);
       expect(received.skillContent).toContain('# Deploy Service');
     });
 
-    it('KC3: Runtime picked from runtimeOptions', async () => {
+    it('KC3: Runtime picked from runtimeOptions', () => {
       const result = createSuccessResult(goldenPathRequest);
       expect(result.telemetry.runtime).toBe('claude');
       expect(goldenPathRequest.dispatch.targetSelection.runtimeOptions).toContain('claude');
     });
 
-    it('KC4: Telemetry has runtime/model/stepsExecuted', async () => {
+    it('KC4: Telemetry has runtime/model/stepsExecuted', () => {
       const result = createSuccessResult(goldenPathRequest);
       expect(result.telemetry.runtime).toBeDefined();
       expect(result.telemetry.model).toBeDefined();
