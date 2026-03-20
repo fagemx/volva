@@ -397,6 +397,65 @@ describe('dispatchToKarvi', () => {
   });
 });
 
+// ─── Non-approval KarviApiError codes ───
+
+describe('dispatchToKarvi non-approval error codes', () => {
+  let db: Database;
+
+  beforeEach(() => {
+    db = createDb(':memory:');
+    initSchema(db);
+  });
+
+  it('re-throws RATE_LIMITED error (does not fallback)', async () => {
+    const client = makeMockKarviClient();
+    client.dispatchSkill.mockRejectedValueOnce(
+      new KarviApiError('RATE_LIMITED', 'Too many requests'),
+    );
+
+    const deps: DispatchDeps = {
+      skillObjectLookup: makeLookup(makeSkillObject()),
+      karviClient: client,
+      db,
+      readSkillContent: () => '# SKILL.md',
+    };
+
+    await expect(dispatchToKarvi(makeContext(), deps)).rejects.toThrow('RATE_LIMITED');
+  });
+
+  it('re-throws INVALID_REQUEST error', async () => {
+    const client = makeMockKarviClient();
+    client.dispatchSkill.mockRejectedValueOnce(
+      new KarviApiError('INVALID_REQUEST', 'Missing required field'),
+    );
+
+    const deps: DispatchDeps = {
+      skillObjectLookup: makeLookup(makeSkillObject()),
+      karviClient: client,
+      db,
+      readSkillContent: () => '# SKILL.md',
+    };
+
+    await expect(dispatchToKarvi(makeContext(), deps)).rejects.toThrow('INVALID_REQUEST');
+  });
+
+  it('re-throws UNAUTHORIZED error', async () => {
+    const client = makeMockKarviClient();
+    client.dispatchSkill.mockRejectedValueOnce(
+      new KarviApiError('UNAUTHORIZED', 'Invalid API key'),
+    );
+
+    const deps: DispatchDeps = {
+      skillObjectLookup: makeLookup(makeSkillObject()),
+      karviClient: client,
+      db,
+      readSkillContent: () => '# SKILL.md',
+    };
+
+    await expect(dispatchToKarvi(makeContext(), deps)).rejects.toThrow('UNAUTHORIZED');
+  });
+});
+
 // ─── Health check + fallback strategy ───
 
 describe('dispatchToKarvi fallback strategies', () => {
@@ -620,6 +679,71 @@ describe('processDispatchQueue', () => {
       .get() as Record<string, unknown>;
     expect(row.status).toBe('pending');
     expect(row.retry_count).toBe(1);
+  });
+
+  it('handles partial failure: first succeeds, middle fails, last succeeds', async () => {
+    const makeRequestJson = (id: string) => JSON.stringify({
+      skillId: id,
+      skillName: id,
+      skillVersion: '1.0',
+      skillContent: '',
+      environment: {
+        toolsRequired: [],
+        toolsOptional: [],
+        permissions: { filesystem: { read: false, write: false }, network: { read: false, write: false }, process: { spawn: false }, secrets: { read: [] } },
+        externalSideEffects: false,
+        executionMode: 'advisory',
+      },
+      dispatch: {
+        targetSelection: { repoPolicy: 'explicit', runtimeOptions: [] },
+        workerClass: [],
+        handoff: { inputArtifacts: [], outputArtifacts: [] },
+        executionPolicy: { sync: false, retries: 2, timeoutMinutes: 1, escalationOnFailure: false },
+        approval: { requireHumanBeforeDispatch: false, requireHumanBeforeMerge: false },
+      },
+      verification: { smokeChecks: [], assertions: [], humanCheckpoints: [], outcomeSignals: [] },
+      context: { userMessage: 'test', inputs: {} },
+    });
+
+    db.prepare(
+      `INSERT INTO dispatch_queue (id, skill_id, request_json, fallback_reason, max_retries)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run('dq_partial_1', 'skill.1', makeRequestJson('skill.1'), 'reason', 3);
+    db.prepare(
+      `INSERT INTO dispatch_queue (id, skill_id, request_json, fallback_reason, max_retries)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run('dq_partial_2', 'skill.2', makeRequestJson('skill.2'), 'reason', 3);
+    db.prepare(
+      `INSERT INTO dispatch_queue (id, skill_id, request_json, fallback_reason, max_retries)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run('dq_partial_3', 'skill.3', makeRequestJson('skill.3'), 'reason', 3);
+
+    const client = makeMockKarviClient();
+    client.getHealth.mockResolvedValueOnce({ ok: true });
+    client.dispatchSkill
+      .mockResolvedValueOnce({ dispatchId: 'disp-1', status: 'pending' })
+      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockResolvedValueOnce({ dispatchId: 'disp-3', status: 'pending' });
+
+    const { processDispatchQueue } = await import('./skill-dispatcher');
+    const result = await processDispatchQueue(client, db);
+
+    expect(result.processed).toBe(3);
+    expect(result.succeeded).toBe(2);
+    expect(result.failed).toBe(1);
+
+    const row1 = db.prepare("SELECT status FROM dispatch_queue WHERE id = 'dq_partial_1'")
+      .get() as Record<string, unknown>;
+    expect(row1.status).toBe('dispatched');
+
+    const row2 = db.prepare("SELECT status, retry_count FROM dispatch_queue WHERE id = 'dq_partial_2'")
+      .get() as Record<string, unknown>;
+    expect(row2.status).toBe('pending');
+    expect(row2.retry_count).toBe(1);
+
+    const row3 = db.prepare("SELECT status FROM dispatch_queue WHERE id = 'dq_partial_3'")
+      .get() as Record<string, unknown>;
+    expect(row3.status).toBe('dispatched');
   });
 });
 
