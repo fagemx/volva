@@ -72,7 +72,7 @@ export function approvalRoutes(deps: ApprovalDeps): Hono {
     const outcome = await dispatchToKarvi(ctx, dispatchDeps);
 
     if (outcome.type === 'dispatched') {
-      return ok(c, { type: 'dispatched' as const, result: outcome.result });
+      return ok(c, { type: 'dispatched' as const, dispatchId: outcome.dispatchId, status: outcome.status });
     }
 
     if (outcome.type === 'approval_required') {
