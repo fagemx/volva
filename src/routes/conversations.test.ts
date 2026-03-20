@@ -135,7 +135,7 @@ describe('Conversation Routes', () => {
 
     const err = json.error as Record<string, unknown>;
     expect(err.code).toBe('INVALID_INPUT');
-    expect(err.message).toContain('Invalid mode');
+    expect(err.message).toContain('Invalid enum value');
   });
 
   it('creates conversation with village_id association', async () => {

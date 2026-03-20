@@ -36,7 +36,7 @@ export type Message = z.infer<typeof MessageSchema>;
 // ─── Input DTOs ───
 
 export const CreateConversationInput = z.object({
-  mode: ConversationMode,
+  mode: ConversationMode.default('world_design'),
   village_id: z.string().optional(),
 });
 export type CreateConversationInput = z.infer<typeof CreateConversationInput>;

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import type { Database } from 'bun:sqlite';
 import { ok, error } from './response';
 import type { LLMClient } from '../llm/client';
@@ -8,7 +9,13 @@ import { handleTurn } from '../conductor/turn-handler';
 import { handleManagementTurn } from '../conductor/management-handler';
 import { loadVillageState } from '../cards/village-loader';
 import type { SkillData } from '../thyra-client/schemas';
-import type { ConversationMode } from '../schemas/conversation';
+import { CreateConversationInput, type ConversationMode } from '../schemas/conversation';
+
+// ─── Input Schemas ───
+
+const SendMessageInput = z.object({
+  content: z.string().min(1),
+});
 
 export interface ConversationDeps {
   db: Database;
@@ -22,14 +29,14 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
 
   // POST /api/conversations
   app.post('/api/conversations', async (c) => {
-    const body: Record<string, unknown> = await c.req.json();
-    const mode = typeof body.mode === 'string' ? body.mode : 'world_design';
-    const villageId = typeof body.village_id === 'string' ? body.village_id : undefined;
-
-    const validModes = ['world_design', 'workflow_design', 'task', 'pipeline_design', 'adapter_config', 'commerce_design', 'org_design', 'world_management'];
-    if (!validModes.includes(mode)) {
-      return error(c, 'INVALID_INPUT', `Invalid mode: ${mode}`, 400);
+    const body: unknown = await c.req.json();
+    const parsed = CreateConversationInput.safeParse(body);
+    if (!parsed.success) {
+      return error(c, 'INVALID_INPUT', parsed.error.issues[0].message, 400);
     }
+
+    const mode = parsed.data.mode;
+    const villageId = parsed.data.village_id;
 
     if (mode === 'world_management' && !villageId) {
       return error(c, 'INVALID_INPUT', 'village_id is required for world_management mode', 400);
@@ -105,12 +112,13 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
   // POST /api/conversations/:id/messages
   app.post('/api/conversations/:id/messages', async (c) => {
     const conversationId = c.req.param('id');
-    const body: Record<string, unknown> = await c.req.json();
-    const content = body.content;
-
-    if (!content || typeof content !== 'string') {
+    const body: unknown = await c.req.json();
+    const msgParsed = SendMessageInput.safeParse(body);
+    if (!msgParsed.success) {
       return error(c, 'INVALID_INPUT', 'content is required', 400);
     }
+
+    const content = msgParsed.data.content;
 
     const conv = deps.db
       .query('SELECT phase, mode, nomod_streak, skills_json, village_id FROM conversations WHERE id = ?')

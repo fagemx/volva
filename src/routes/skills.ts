@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import type { Database } from 'bun:sqlite';
 import { ok, error } from './response';
 import type { LLMClient } from '../llm/client';
@@ -8,7 +9,7 @@ import { recordRun, getMetrics } from '../skills/telemetry';
 import { evaluatePromotionGates } from '../skills/promotion';
 import { capturePattern } from '../skills/harvest';
 import { crystallize } from '../skills/crystallizer';
-import type { SkillStatus } from '../schemas/skill-object';
+import { SkillStatusEnum } from '../schemas/skill-object';
 
 // ─── DI Interface ───
 
@@ -17,6 +18,42 @@ export interface SkillDeps {
   llm: LLMClient;
   registry: SkillRegistry;
 }
+
+// ─── Input Schemas ───
+
+const SkillRunInput = z.object({
+  outcome: z.enum(['success', 'failure', 'partial']).default('success'),
+  durationMs: z.number().optional(),
+  notes: z.string().optional(),
+  conversationId: z.string().optional(),
+});
+
+const SkillMatchInput = z.object({
+  context: z.string().min(1),
+});
+
+const SkillHarvestInput = z.object({
+  context: z.string().min(1),
+  history: z.array(z.object({
+    role: z.string(),
+    content: z.string(),
+  })).min(1),
+});
+
+const SkillCrystallizeInput = z.object({
+  confirmation: z.literal(true),
+  candidate: z.object({
+    name: z.string(),
+    summary: z.string(),
+    problemShapes: z.array(z.string()).default([]),
+    desiredOutcomes: z.array(z.string()).default([]),
+    nonGoals: z.array(z.string()).default([]),
+    triggerWhen: z.array(z.string()).default([]),
+    doNotTriggerWhen: z.array(z.string()).default([]),
+    methodOutline: z.array(z.string()).default([]),
+    observedGotchas: z.array(z.string()).default([]),
+  }),
+});
 
 // ─── Route Factory ───
 
@@ -30,14 +67,14 @@ export function skillRoutes(deps: SkillDeps): Hono {
     const domain = c.req.query('domain');
     const tags = c.req.query('tags');
 
-    const filter: { minStatus?: SkillStatus; domain?: string; tags?: string[] } = {};
+    const filter: { minStatus?: z.infer<typeof SkillStatusEnum>; domain?: string; tags?: string[] } = {};
 
     if (status) {
-      const validStatuses: SkillStatus[] = ['draft', 'sandbox', 'promoted', 'core', 'deprecated', 'superseded'];
-      if (!validStatuses.includes(status as SkillStatus)) {
+      const statusParsed = SkillStatusEnum.safeParse(status);
+      if (!statusParsed.success) {
         return error(c, 'INVALID_INPUT', `Invalid status filter: ${status}`, 400);
       }
-      filter.minStatus = status as SkillStatus;
+      filter.minStatus = statusParsed.data;
     }
 
     if (domain) {
@@ -79,12 +116,17 @@ export function skillRoutes(deps: SkillDeps): Hono {
   // Record a skill run (telemetry) (0 LLM calls)
   app.post('/api/skills/:id/run', async (c) => {
     const skillId = c.req.param('id');
-    const body: Record<string, unknown> = await c.req.json();
+    const body: unknown = await c.req.json();
 
     // Verify skill exists in registry
     const skillObject = deps.registry.get(skillId);
     if (!skillObject) {
       return error(c, 'NOT_FOUND', `Skill ${skillId} not found`, 404);
+    }
+
+    const parsed = SkillRunInput.safeParse(body);
+    if (!parsed.success) {
+      return error(c, 'INVALID_INPUT', parsed.error.issues[0].message, 400);
     }
 
     // Look up or create skill_instance row
@@ -103,22 +145,12 @@ export function skillRoutes(deps: SkillDeps): Hono {
       );
     }
 
-    const outcome = typeof body.outcome === 'string' ? body.outcome : 'success';
-    const validOutcomes = ['success', 'failure', 'partial'];
-    if (!validOutcomes.includes(outcome)) {
-      return error(c, 'INVALID_INPUT', `Invalid outcome: ${outcome}`, 400);
-    }
-
-    const durationMs = typeof body.durationMs === 'number' ? body.durationMs : undefined;
-    const notes = typeof body.notes === 'string' ? body.notes : undefined;
-    const conversationId = typeof body.conversationId === 'string' ? body.conversationId : undefined;
-
     const runId = recordRun(deps.db, {
       skillInstanceId: instanceId,
-      conversationId,
-      outcome: outcome as 'success' | 'failure' | 'partial',
-      durationMs,
-      notes,
+      conversationId: parsed.data.conversationId,
+      outcome: parsed.data.outcome,
+      durationMs: parsed.data.durationMs,
+      notes: parsed.data.notes,
     });
 
     return ok(c, { runId, skillId, instanceId }, 201);
@@ -165,15 +197,14 @@ export function skillRoutes(deps: SkillDeps): Hono {
   // ─── POST /api/skills/match ───
   // Trigger matching against context (0 LLM calls)
   app.post('/api/skills/match', async (c) => {
-    const body: Record<string, unknown> = await c.req.json();
-    const context = body.context;
-
-    if (!context || typeof context !== 'string') {
-      return error(c, 'INVALID_INPUT', 'context is required', 400);
+    const body: unknown = await c.req.json();
+    const parsed = SkillMatchInput.safeParse(body);
+    if (!parsed.success) {
+      return error(c, 'INVALID_INPUT', parsed.error.issues[0].message, 400);
     }
 
     const entries = deps.registry.list();
-    const matches = matchSkills(context, entries);
+    const matches = matchSkills(parsed.data.context, entries);
 
     return ok(c, { matches });
   });
@@ -182,33 +213,18 @@ export function skillRoutes(deps: SkillDeps): Hono {
   // Pattern capture step 1 of 2 (SETTLE-01: returns candidate for review)
   // 1 LLM call — NOT inside handleTurn, satisfies COND-02
   app.post('/api/skills/harvest', async (c) => {
-    const body: Record<string, unknown> = await c.req.json();
-    const context = body.context;
-    const history = body.history;
-
-    if (!context || typeof context !== 'string') {
-      return error(c, 'INVALID_INPUT', 'context is required', 400);
+    const body: unknown = await c.req.json();
+    const parsed = SkillHarvestInput.safeParse(body);
+    if (!parsed.success) {
+      return error(c, 'INVALID_INPUT', parsed.error.issues[0].message, 400);
     }
 
-    if (!Array.isArray(history) || history.length === 0) {
-      return error(c, 'INVALID_INPUT', 'history is required (non-empty array of {role, content})', 400);
-    }
+    const conversationHistory = parsed.data.history.map((msg) => ({
+      role: msg.role,
+      content: msg.content,
+    }));
 
-    const conversationHistory = history
-      .filter(
-        (msg): msg is { role: string; content: string } =>
-          typeof msg === 'object' &&
-          msg !== null &&
-          typeof (msg as Record<string, unknown>).role === 'string' &&
-          typeof (msg as Record<string, unknown>).content === 'string',
-      )
-      .map((msg) => ({ role: msg.role, content: msg.content }));
-
-    if (conversationHistory.length === 0) {
-      return error(c, 'INVALID_INPUT', 'history must contain messages with role and content', 400);
-    }
-
-    const result = await capturePattern(deps.llm, conversationHistory, context);
+    const result = await capturePattern(deps.llm, conversationHistory, parsed.data.context);
 
     if (!result.ok) {
       return error(c, 'LLM_ERROR', result.error, 500);
@@ -226,57 +242,25 @@ export function skillRoutes(deps: SkillDeps): Hono {
   // Crystallize candidate step 2 of 2 (SETTLE-01: requires confirmation)
   // 0 LLM calls — pure function
   app.post('/api/skills/crystallize', async (c) => {
-    const body: Record<string, unknown> = await c.req.json();
-
-    // SETTLE-01: requires explicit confirmation
-    if (body.confirmation !== true) {
-      return error(
-        c,
-        'CONFIRMATION_REQUIRED',
-        'Crystallize requires confirmation: true (CONTRACT SETTLE-01)',
-        400,
+    const body: unknown = await c.req.json();
+    const parsed = SkillCrystallizeInput.safeParse(body);
+    if (!parsed.success) {
+      // Check if it's specifically a confirmation issue
+      const isConfirmationIssue = parsed.error.issues.some(
+        (issue) => issue.path.includes('confirmation'),
       );
+      if (isConfirmationIssue) {
+        return error(
+          c,
+          'CONFIRMATION_REQUIRED',
+          'Crystallize requires confirmation: true (CONTRACT SETTLE-01)',
+          400,
+        );
+      }
+      return error(c, 'INVALID_INPUT', parsed.error.issues[0].message, 400);
     }
 
-    const candidate = body.candidate;
-    if (!candidate || typeof candidate !== 'object') {
-      return error(c, 'INVALID_INPUT', 'candidate is required', 400);
-    }
-
-    const candidateRecord = candidate as Record<string, unknown>;
-
-    // Validate required fields
-    const name = candidateRecord.name;
-    const summary = candidateRecord.summary;
-    if (typeof name !== 'string' || typeof summary !== 'string') {
-      return error(c, 'INVALID_INPUT', 'candidate must have name and summary', 400);
-    }
-
-    const skillCandidate = {
-      name,
-      summary,
-      problemShapes: Array.isArray(candidateRecord.problemShapes)
-        ? (candidateRecord.problemShapes as unknown[]).filter((s): s is string => typeof s === 'string')
-        : [],
-      desiredOutcomes: Array.isArray(candidateRecord.desiredOutcomes)
-        ? (candidateRecord.desiredOutcomes as unknown[]).filter((s): s is string => typeof s === 'string')
-        : [],
-      nonGoals: Array.isArray(candidateRecord.nonGoals)
-        ? (candidateRecord.nonGoals as unknown[]).filter((s): s is string => typeof s === 'string')
-        : [],
-      triggerWhen: Array.isArray(candidateRecord.triggerWhen)
-        ? (candidateRecord.triggerWhen as unknown[]).filter((s): s is string => typeof s === 'string')
-        : [],
-      doNotTriggerWhen: Array.isArray(candidateRecord.doNotTriggerWhen)
-        ? (candidateRecord.doNotTriggerWhen as unknown[]).filter((s): s is string => typeof s === 'string')
-        : [],
-      methodOutline: Array.isArray(candidateRecord.methodOutline)
-        ? (candidateRecord.methodOutline as unknown[]).filter((s): s is string => typeof s === 'string')
-        : [],
-      observedGotchas: Array.isArray(candidateRecord.observedGotchas)
-        ? (candidateRecord.observedGotchas as unknown[]).filter((s): s is string => typeof s === 'string')
-        : [],
-    };
+    const skillCandidate = parsed.data.candidate;
 
     try {
       const result = crystallize(skillCandidate);
