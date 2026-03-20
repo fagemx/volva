@@ -76,6 +76,7 @@ function makeMinimalSkillObject(overrides?: Partial<SkillObject>): SkillObject {
     },
     dispatch: {
       mode: 'local',
+      fallback: 'local',
       targetSelection: { repoPolicy: 'explicit', runtimeOptions: [] },
       workerClass: [],
       handoff: { inputArtifacts: [], outputArtifacts: [] },

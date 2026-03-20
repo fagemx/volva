@@ -3,6 +3,7 @@ import type { Database } from 'bun:sqlite';
 import { ok, error } from './response';
 import { KarviClient } from '../karvi-client/client';
 import { KarviApiError, KarviNetworkError } from '../karvi-client/schemas';
+import { processDispatchQueue } from './skill-dispatcher';
 
 // ─── DI Interface ───
 
@@ -59,6 +60,13 @@ export function dispatchRoutes(deps: DispatchRouteDeps): Hono {
 
       throw err;
     }
+  });
+
+  // ─── POST /api/dispatches/queue/process ───
+  // Process pending dispatch queue items when Karvi reconnects (0 LLM calls)
+  app.post('/api/dispatches/queue/process', async (c) => {
+    const result = await processDispatchQueue(deps.karvi, deps.db);
+    return ok(c, result);
   });
 
   return app;

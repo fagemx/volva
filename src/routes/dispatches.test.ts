@@ -10,6 +10,8 @@ import { createDb, initSchema } from '../db';
 
 function makeMockKarviClient(): KarviClient & {
   cancelDispatch: ReturnType<typeof vi.fn>;
+  getHealth: ReturnType<typeof vi.fn>;
+  dispatchSkill: ReturnType<typeof vi.fn>;
 } {
   const client = {
     cancelDispatch: vi.fn(),
@@ -22,6 +24,8 @@ function makeMockKarviClient(): KarviClient & {
     deletePipeline: vi.fn(),
   } as unknown as KarviClient & {
     cancelDispatch: ReturnType<typeof vi.fn>;
+    getHealth: ReturnType<typeof vi.fn>;
+    dispatchSkill: ReturnType<typeof vi.fn>;
   };
   return client;
 }
@@ -30,7 +34,7 @@ function makeMockKarviClient(): KarviClient & {
 
 describe('POST /api/dispatches/:id/cancel', () => {
   let db: Database;
-  let karvi: KarviClient & { cancelDispatch: ReturnType<typeof vi.fn> };
+  let karvi: KarviClient & { cancelDispatch: ReturnType<typeof vi.fn>; getHealth: ReturnType<typeof vi.fn>; dispatchSkill: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     db = createDb(':memory:');
@@ -168,5 +172,83 @@ describe('POST /api/dispatches/:id/cancel', () => {
       'SELECT * FROM decision_events WHERE event_type = ?',
     ).all('dispatch_cancelled') as Array<Record<string, unknown>>;
     expect(events).toHaveLength(0);
+  });
+});
+
+// ─── POST /api/dispatches/queue/process ───
+
+describe('POST /api/dispatches/queue/process', () => {
+  let db: Database;
+  let karvi: KarviClient & { cancelDispatch: ReturnType<typeof vi.fn>; getHealth: ReturnType<typeof vi.fn>; dispatchSkill: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    db = createDb(':memory:');
+    initSchema(db);
+    karvi = makeMockKarviClient();
+  });
+
+  function makeApp(deps?: Partial<DispatchRouteDeps>) {
+    return dispatchRoutes({ karvi, db, ...deps });
+  }
+
+  async function processQueueRequest(app: ReturnType<typeof makeApp>) {
+    const req = new Request('http://localhost/api/dispatches/queue/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return app.fetch(req);
+  }
+
+  it('returns zero counts when Karvi is unhealthy', async () => {
+    karvi.getHealth.mockResolvedValueOnce({ ok: false });
+
+    const app = makeApp();
+    const res = await processQueueRequest(app);
+    expect(res.status).toBe(200);
+
+    const json = await res.json() as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    const data = json.data as Record<string, unknown>;
+    expect(data.processed).toBe(0);
+  });
+
+  it('processes pending items when healthy', async () => {
+    // Insert pending item
+    const requestJson = JSON.stringify({
+      skillId: 'skill.test',
+      skillName: 'test',
+      skillVersion: '1.0',
+      skillContent: '',
+      environment: {
+        toolsRequired: [], toolsOptional: [],
+        permissions: { filesystem: { read: false, write: false }, network: { read: false, write: false }, process: { spawn: false }, secrets: { read: [] } },
+        externalSideEffects: false, executionMode: 'advisory',
+      },
+      dispatch: {
+        targetSelection: { repoPolicy: 'explicit', runtimeOptions: [] },
+        workerClass: [], handoff: { inputArtifacts: [], outputArtifacts: [] },
+        executionPolicy: { sync: false, retries: 0, timeoutMinutes: 1, escalationOnFailure: false },
+        approval: { requireHumanBeforeDispatch: false, requireHumanBeforeMerge: false },
+      },
+      verification: { smokeChecks: [], assertions: [], humanCheckpoints: [], outcomeSignals: [] },
+      context: { userMessage: 'test', inputs: {} },
+    });
+    db.prepare(
+      `INSERT INTO dispatch_queue (id, skill_id, request_json, fallback_reason)
+       VALUES (?, ?, ?, ?)`,
+    ).run('dq_route_1', 'skill.test', requestJson, 'health check failed');
+
+    karvi.getHealth.mockResolvedValueOnce({ ok: true });
+    karvi.dispatchSkill.mockResolvedValueOnce({ dispatchId: 'disp-new', status: 'pending' });
+
+    const app = makeApp();
+    const res = await processQueueRequest(app);
+    expect(res.status).toBe(200);
+
+    const json = await res.json() as Record<string, unknown>;
+    const data = json.data as Record<string, unknown>;
+    expect(data.processed).toBe(1);
+    expect(data.succeeded).toBe(1);
+    expect(data.failed).toBe(0);
   });
 });
