@@ -353,15 +353,16 @@ describe('forgeBuild', () => {
       fetchFn: mockFetch((url, init) => {
         capturedUrl = url;
         capturedMethod = init?.method ?? 'GET';
-        return jsonResponse({ ok: true, data: { buildId: 'build-456', status: 'running', pipeline: 'economic-v1' } });
+        return jsonResponse({ ok: true, data: { buildId: 'build-456', status: 'queued', pipeline: 'forge-economic', steps: 3 } });
       }),
     });
     const result = await client.forgeBuild(sampleForgeBuildRequest);
     expect(capturedUrl).toBe('http://localhost:3464/api/volva/forge-build');
     expect(capturedMethod).toBe('POST');
     expect(result.buildId).toBe('build-456');
-    expect(result.status).toBe('running');
-    expect(result.pipeline).toBe('economic-v1');
+    expect(result.status).toBe('queued');
+    expect(result.pipeline).toBe('forge-economic');
+    expect(result.steps).toBe(3);
   });
 
   it('throws KarviApiError on EMPTY_BUILD', async () => {

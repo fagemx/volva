@@ -15,7 +15,10 @@ import { buildSpace } from '../decision/space-builder';
 import { applyKillFilters, type KillFilterConstraints } from '../decision/kill-filters';
 import { isProbeReady, packageProbe } from '../decision/probe-shell';
 import { buildForgeBuildRequest, type ForgeHandoffContext } from '../decision/forge-handoff';
-import { ForgeBuildResultSchema } from '../karvi-client/schemas';
+import {
+  ForgeBuildResultSchema,
+  type ForgeBuildDispatchData,
+} from '../karvi-client/schemas';
 import { consumeForgeResult } from '../skills/telemetry-consumer';
 import type {
   IntentRoute,
@@ -218,6 +221,47 @@ function buildFastPathCommitMemo(session: DecisionSession): CommitMemo {
     whatForgeShouldBuild: ['Implement based on fixed elements from path check'],
     whatForgeMustNotBuild: [],
     recommendedNextStep: ['Proceed to Forge implementation'],
+  };
+}
+
+type CommitMemoDraftRow = {
+  candidate_id: string;
+  regime: Regime;
+  verdict: 'commit' | 'hold' | 'discard';
+  rationale_json: string;
+  evidence_used_json: string;
+  unresolved_risks_json: string;
+  recommended_next_step_json: string;
+  what_forge_should_build_json: string;
+  what_forge_must_not_build_json: string;
+};
+
+function getLatestCommitMemoDraft(db: Database, sessionId: string): CommitMemo | null {
+  const row = db
+    .query(
+      `SELECT candidate_id, regime, verdict, rationale_json, evidence_used_json,
+              unresolved_risks_json, recommended_next_step_json,
+              what_forge_should_build_json, what_forge_must_not_build_json
+       FROM commit_memo_drafts
+       WHERE session_id = ?
+       ORDER BY created_at DESC
+       LIMIT 1`,
+    )
+    .get(sessionId) as CommitMemoDraftRow | null;
+
+  if (!row) return null;
+  if (row.verdict !== 'commit') return null;
+
+  return {
+    candidateId: row.candidate_id,
+    regime: row.regime,
+    verdict: 'commit',
+    rationale: JSON.parse(row.rationale_json) as string[],
+    evidenceUsed: JSON.parse(row.evidence_used_json) as string[],
+    unresolvedRisks: JSON.parse(row.unresolved_risks_json) as string[],
+    recommendedNextStep: JSON.parse(row.recommended_next_step_json) as string[],
+    whatForgeShouldBuild: JSON.parse(row.what_forge_should_build_json) as string[],
+    whatForgeMustNotBuild: JSON.parse(row.what_forge_must_not_build_json) as string[],
   };
 }
 
@@ -533,7 +577,7 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
       // Build ForgeBuildRequest and dispatch to Karvi (graceful degradation)
       const forgeContext: ForgeHandoffContext = { sessionId: session.id, workingDir, targetRepo };
       const forgeBuildRequest = buildForgeBuildRequest(syntheticMemo, forgeContext);
-      let forgeResult: { buildId: string; status: string; pipeline: string } | null = null;
+      let forgeResult: ForgeBuildDispatchData | null = null;
       if (deps.karvi) {
         try {
           forgeResult = await deps.karvi.forgeBuild(forgeBuildRequest);
@@ -550,13 +594,55 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
       return error(c, 'INVALID_STAGE', `Expected commit-review or fast-path, got ${session.stage}`, 400);
     }
 
+    const commitMemo = getLatestCommitMemoDraft(deps.db, session.id);
+    if (!commitMemo) {
+      return error(c, 'NOT_FOUND', 'No commit memo with verdict=commit found for this session', 404);
+    }
+
+    if (!deps.karvi) {
+      return error(c, 'KARVI_UNAVAILABLE', 'Karvi client is not configured for forge dispatch', 503);
+    }
+
+    const forgeContext: ForgeHandoffContext = { sessionId: session.id, workingDir, targetRepo };
+    const forgeBuildRequest = buildForgeBuildRequest(commitMemo, forgeContext);
+
+    let forgeResult: ForgeBuildDispatchData | null = null;
+    try {
+      forgeResult = await deps.karvi.forgeBuild(forgeBuildRequest);
+    } catch (err) {
+      if (
+        typeof err === 'object'
+        && err !== null
+        && 'code' in err
+        && 'message' in err
+        && typeof (err as { code: unknown }).code === 'string'
+        && typeof (err as { message: unknown }).message === 'string'
+      ) {
+        return error(
+          c,
+          (err as { code: string }).code,
+          (err as { message: string }).message,
+          400,
+        );
+      }
+      return error(c, 'KARVI_UNAVAILABLE', 'Failed to dispatch forge build to Karvi', 503);
+    }
+
     // Advance to done via remaining stages
     deps.sessionManager.advanceStage(session.id, 'spec-crystallization');
     deps.sessionManager.advanceStage(session.id, 'promotion-check');
     deps.sessionManager.advanceStage(session.id, 'done');
     deps.sessionManager.updateSession(session.id, { status: 'promoted' });
 
-    return ok(c, { sessionId: session.id, forgeReady: true, fastPath: false, stage: 'done' });
+    return ok(c, {
+      sessionId: session.id,
+      commitMemo,
+      forgeBuildRequest,
+      forgeResult,
+      forgeReady: true,
+      fastPath: false,
+      stage: 'done',
+    });
   });
 
   // ─── POST /api/decisions/:id/forge-result ───

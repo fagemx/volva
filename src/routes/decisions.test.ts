@@ -5,6 +5,7 @@ import { createDb, initSchema } from '../db';
 import { DecisionSessionManager } from '../decision/session-manager';
 import { decisionRoutes, type DecisionDeps } from './decisions';
 import type { LLMClient } from '../llm/client';
+import type { KarviClient } from '../karvi-client/client';
 import type { IntentRoute, RealizationCandidate } from '../schemas/decision';
 
 // ─── Test Helpers ───
@@ -16,9 +17,19 @@ function makeLLMClient(): LLMClient & { generateStructured: ReturnType<typeof vi
   } as unknown as LLMClient & { generateStructured: ReturnType<typeof vi.fn> };
 }
 
-function makeApp(db: Database, llm: LLMClient): { app: Hono; sessionManager: DecisionSessionManager } {
+function makeKarviClient(): KarviClient & { forgeBuild: ReturnType<typeof vi.fn> } {
+  return {
+    forgeBuild: vi.fn(),
+  } as unknown as KarviClient & { forgeBuild: ReturnType<typeof vi.fn> };
+}
+
+function makeApp(
+  db: Database,
+  llm: LLMClient,
+  karvi?: KarviClient,
+): { app: Hono; sessionManager: DecisionSessionManager } {
   const sessionManager = new DecisionSessionManager(db);
-  const deps: DecisionDeps = { db, llm, sessionManager };
+  const deps: DecisionDeps = { db, llm, sessionManager, karvi };
   const root = new Hono();
   root.route('/', decisionRoutes(deps));
   return { app: root, sessionManager };
@@ -133,6 +144,7 @@ function makeGovernanceCandidates(): RealizationCandidate[] {
 describe('Decision Routes E2E', () => {
   let db: Database;
   let llm: LLMClient & { generateStructured: ReturnType<typeof vi.fn> };
+  let karvi: KarviClient & { forgeBuild: ReturnType<typeof vi.fn> };
   let app: Hono;
   let sessionManager: DecisionSessionManager;
 
@@ -140,7 +152,14 @@ describe('Decision Routes E2E', () => {
     db = createDb(':memory:');
     initSchema(db);
     llm = makeLLMClient();
-    const result = makeApp(db, llm);
+    karvi = makeKarviClient();
+    karvi.forgeBuild.mockResolvedValue({
+      buildId: 'build-default',
+      status: 'queued',
+      pipeline: 'forge-economic',
+      steps: 3,
+    });
+    const result = makeApp(db, llm, karvi);
     app = result.app;
     sessionManager = result.sessionManager;
   });
@@ -246,6 +265,78 @@ describe('Decision Routes E2E', () => {
       expect(finalSession!.stage).toBe('done');
       expect(finalSession!.status).toBe('promoted');
     });
+
+    it('dispatches forge build to Karvi with economic request payload', async () => {
+      const karvi = makeKarviClient();
+      karvi.forgeBuild.mockResolvedValueOnce({
+        buildId: 'build-economic-001',
+        status: 'queued',
+        pipeline: 'forge-economic',
+        steps: 3,
+      });
+
+      const result = makeApp(db, llm, karvi);
+      app = result.app;
+      sessionManager = result.sessionManager;
+
+      llm.generateStructured.mockResolvedValueOnce({ ok: true, data: economicIntentRoute });
+      const startRes = await jsonPost(app, '/api/decisions/start', {
+        userMessage: 'I want to make money with automation',
+      });
+      const startBody = await startRes.json() as { ok: boolean; data: { sessionId: string } };
+      const sessionId = startBody.data.sessionId;
+
+      await jsonPost(app, `/api/decisions/${sessionId}/path-check`, {});
+      llm.generateStructured.mockResolvedValueOnce({ ok: true, data: makeEconomicCandidates() });
+      await jsonPost(app, `/api/decisions/${sessionId}/space-build`, { userMessage: 'video generation install service' });
+
+      const candidates = sessionManager.getCandidates(sessionId);
+      await jsonPost(app, `/api/decisions/${sessionId}/evaluate`, {
+        candidateId: candidates[0].id,
+        signals: [
+          {
+            signalType: 'buyer_interest',
+            strength: 'strong',
+            evidence: ['3 studios ready to pay'],
+            interpretation: 'Strong demand',
+            nextQuestions: [],
+          },
+        ],
+      });
+
+      const forgeRes = await jsonPost(app, `/api/decisions/${sessionId}/forge`, {
+        confirmation: true,
+      });
+      expect(forgeRes.status).toBe(200);
+      const forgeBody = await forgeRes.json() as {
+        ok: boolean;
+        data: {
+          forgeBuildRequest: {
+            regime: string;
+            regimeContext: { kind: string };
+          };
+          forgeResult: { buildId: string; status: string; pipeline: string; steps: number };
+          stage: string;
+        };
+      };
+
+      expect(forgeBody.ok).toBe(true);
+      expect(forgeBody.data.forgeBuildRequest.regime).toBe('economic');
+      expect(forgeBody.data.forgeBuildRequest.regimeContext.kind).toBe('economic');
+      expect(forgeBody.data.forgeResult.buildId).toBe('build-economic-001');
+      expect(forgeBody.data.forgeResult.status).toBe('queued');
+      expect(forgeBody.data.forgeResult.pipeline).toBe('forge-economic');
+      expect(forgeBody.data.forgeResult.steps).toBe(3);
+      expect(forgeBody.data.stage).toBe('done');
+
+      expect(karvi.forgeBuild).toHaveBeenCalledTimes(1);
+      const req = karvi.forgeBuild.mock.calls[0][0] as {
+        regime: string;
+        regimeContext: { kind: string };
+      };
+      expect(req.regime).toBe('economic');
+      expect(req.regimeContext.kind).toBe('economic');
+    });
   });
 
   // ═══════════════════════════════════════════
@@ -331,6 +422,76 @@ describe('Decision Routes E2E', () => {
       };
       expect(forgeBody.data.forgeReady).toBe(true);
       expect(forgeBody.data.stage).toBe('done');
+    });
+
+    it('dispatches forge build to Karvi with governance request payload', async () => {
+      const karvi = makeKarviClient();
+      karvi.forgeBuild.mockResolvedValueOnce({
+        buildId: 'build-governance-001',
+        status: 'queued',
+        pipeline: 'forge-governance',
+        steps: 3,
+      });
+
+      const result = makeApp(db, llm, karvi);
+      app = result.app;
+      sessionManager = result.sessionManager;
+
+      llm.generateStructured.mockResolvedValueOnce({ ok: true, data: governanceIntentRoute });
+      const startRes = await jsonPost(app, '/api/decisions/start', {
+        userMessage: 'I want a self-governing creator market',
+      });
+      const startBody = await startRes.json() as { ok: boolean; data: { sessionId: string } };
+      const sessionId = startBody.data.sessionId;
+
+      await jsonPost(app, `/api/decisions/${sessionId}/path-check`, {});
+      llm.generateStructured.mockResolvedValueOnce({ ok: true, data: makeGovernanceCandidates() });
+      await jsonPost(app, `/api/decisions/${sessionId}/space-build`, {
+        userMessage: 'governed creator world',
+      });
+
+      const candidates = sessionManager.getCandidates(sessionId);
+      await jsonPost(app, `/api/decisions/${sessionId}/evaluate`, {
+        candidateId: candidates[0].id,
+        signals: [
+          {
+            signalType: 'world_density',
+            strength: 'strong',
+            evidence: ['state transitions observed'],
+            interpretation: 'governance pressure exists',
+            nextQuestions: [],
+          },
+        ],
+      });
+
+      const forgeRes = await jsonPost(app, `/api/decisions/${sessionId}/forge`, {
+        confirmation: true,
+      });
+      expect(forgeRes.status).toBe(200);
+
+      const forgeBody = await forgeRes.json() as {
+        ok: boolean;
+        data: {
+          forgeBuildRequest: {
+            regime: string;
+            regimeContext: { kind: string; worldForm?: string };
+          };
+          forgeResult: { pipeline: string; steps: number };
+        };
+      };
+
+      expect(forgeBody.ok).toBe(true);
+      expect(forgeBody.data.forgeBuildRequest.regime).toBe('governance');
+      expect(forgeBody.data.forgeBuildRequest.regimeContext.kind).toBe('governance');
+      expect(forgeBody.data.forgeResult.pipeline).toBe('forge-governance');
+      expect(forgeBody.data.forgeResult.steps).toBe(3);
+
+      expect(karvi.forgeBuild).toHaveBeenCalledTimes(1);
+      const req = karvi.forgeBuild.mock.calls[0][0] as {
+        regimeContext: { kind: string; worldForm?: string };
+      };
+      expect(req.regimeContext.kind).toBe('governance');
+      expect(req.regimeContext.worldForm).toBeDefined();
     });
   });
 

@@ -6,12 +6,14 @@ import {
   type HealthResponse,
   type SkillDispatchRequest,
   type ForgeBuildRequest,
+  type ForgeBuildDispatchData,
   type DispatchStatus,
   type CancelResult,
   PipelineDataSchema,
   DeletePipelineDataSchema,
   HealthResponseSchema,
   DispatchStatusSchema,
+  ForgeBuildDispatchDataSchema,
   CancelResultSchema,
   KarviErrorResponseSchema,
   karviSuccess,
@@ -60,12 +62,8 @@ export class KarviClient {
     }), req);
   }
 
-  async forgeBuild(req: ForgeBuildRequest): Promise<{ buildId: string; status: string; pipeline: string }> {
-    return this.request('POST', '/api/volva/forge-build', z.object({
-      buildId: z.string(),
-      status: z.string(),
-      pipeline: z.string(),
-    }), req);
+  async forgeBuild(req: ForgeBuildRequest): Promise<ForgeBuildDispatchData> {
+    return this.request('POST', '/api/volva/forge-build', ForgeBuildDispatchDataSchema, req);
   }
 
   async getDispatchStatus(id: string): Promise<DispatchStatus> {

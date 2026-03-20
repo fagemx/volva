@@ -34,7 +34,7 @@ const app = new Hono();
 app.route('/', conversationRoutes({ db, llm, cardManager, thyra }));
 app.route('/', cardRoutes({ cardManager }));
 app.route('/', settlementRoutes({ db, cardManager, thyra, karvi }));
-app.route('/', decisionRoutes({ db, llm, sessionManager }));
+app.route('/', decisionRoutes({ db, llm, sessionManager, karvi }));
 app.route('/', skillRoutes({ db, llm, registry }));
 app.route('/', containerRoutes({ skillLookup }));
 app.route('/', dispatchRoutes({ karvi, db }));

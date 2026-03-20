@@ -311,6 +311,14 @@ export const ForgeBuildRequestSchema = z.object({
 });
 export type ForgeBuildRequest = z.infer<typeof ForgeBuildRequestSchema>;
 
+export const ForgeBuildDispatchDataSchema = z.object({
+  buildId: z.string(),
+  status: z.string(),
+  pipeline: z.string(),
+  steps: z.number(),
+});
+export type ForgeBuildDispatchData = z.infer<typeof ForgeBuildDispatchDataSchema>;
+
 const ArtifactSchema = z.object({
   type: z.enum(['file', 'pr', 'config', 'spec']),
   path: z.string(),
