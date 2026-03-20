@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { createDb, initSchema } from '../db';
 import type { Database } from 'bun:sqlite';
 import {
@@ -193,9 +193,7 @@ describe('edda-events', () => {
 
   describe('recordEddaEvent', () => {
     it('inserts event into decision_events table', () => {
-      const sessionId = db
-        .query("INSERT INTO decision_sessions (id) VALUES ('session-123') RETURNING id")
-        .get() as { id: string };
+      db.run("INSERT INTO decision_sessions (id) VALUES ('session-123')");
 
       recordEddaEvent(db, 'session-123', buildApprovalDeniedEvent('pending-456'));
 

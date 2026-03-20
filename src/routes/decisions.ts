@@ -494,32 +494,29 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
       const forgeContext: ForgeHandoffContext = { sessionId: session.id, workingDir, targetRepo };
       const forgeBuildRequest = buildForgeBuildRequest(syntheticMemo, forgeContext);
       let forgeResult: { buildId: string; status: string; pipeline: string } | null = null;
-      let forgeError: Error | null = null;
       if (deps.karvi) {
         try {
           forgeResult = await deps.karvi.forgeBuild(forgeBuildRequest);
-          if (forgeResult) {
-            recordEddaEvent(
-              deps.db,
-              session.id,
-              buildForgeDispatchedEvent(session.id, session.primaryRegime ?? 'economic', forgeResult.buildId),
-            );
-            recordEddaEvent(
-              deps.db,
-              session.id,
-              buildForgeCompletedEvent(session.id, forgeResult.buildId, {
-                status: forgeResult.status,
-                artifactCount: 0,
-              }),
-            );
-          }
+          recordEddaEvent(
+            deps.db,
+            session.id,
+            buildForgeDispatchedEvent(session.id, session.primaryRegime ?? 'economic', forgeResult.buildId),
+          );
+          recordEddaEvent(
+            deps.db,
+            session.id,
+            buildForgeCompletedEvent(session.id, forgeResult.buildId, {
+              status: forgeResult.status,
+              artifactCount: 0,
+            }),
+          );
         } catch (err) {
-          forgeError = err instanceof Error ? err : new Error(String(err));
+          const buildError = err instanceof Error ? err : new Error(String(err));
           console.error('[forge] karvi.forgeBuild failed (fast-path):', err);
           recordEddaEvent(
             deps.db,
             session.id,
-            buildForgeFailedEvent(session.id, 'unknown', forgeError),
+            buildForgeFailedEvent(session.id, 'unknown', buildError),
           );
         }
       }
@@ -570,10 +567,10 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
         id,
         buildForgeCompletedEvent(id, outcome.buildId, {
           status: parsed.data.status,
-          artifactCount: parsed.data.artifacts?.length ?? 0,
+          artifactCount: parsed.data.artifacts.length,
           durationMs: parsed.data.durationMs,
-          costUsd: parsed.data.telemetry?.costUsd,
-          tokensUsed: parsed.data.telemetry?.tokensUsed,
+          costUsd: parsed.data.telemetry.costUsd,
+          tokensUsed: parsed.data.telemetry.tokensUsed,
         }),
       );
     } else {

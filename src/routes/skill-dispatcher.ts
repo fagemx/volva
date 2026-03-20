@@ -184,21 +184,7 @@ export async function dispatchToKarvi(
       notes: `Karvi dispatch: ${dispatchResponse.dispatchId}`,
     });
 
-    if (result.status === 'success' || result.status === 'partial') {
-      recordEddaEventWithConversation(
-        deps.db,
-        ctx.sessionId,
-        ctx.conversationId,
-        buildSkillCompletedEvent(merged.id, dispatchResponse.dispatchId, result),
-      );
-    } else {
-      recordEddaEventWithConversation(
-        deps.db,
-        ctx.sessionId,
-        ctx.conversationId,
-        buildSkillFailedEvent(merged.id, dispatchResponse.dispatchId, new Error('Dispatch failed'), result),
-      );
-    }
+    recordSkillResultEvent(deps.db, ctx, merged.id, dispatchResponse.dispatchId, result);
 
     return { type: 'dispatched', result };
   } catch (error) {
@@ -317,6 +303,21 @@ export async function resubmitWithApproval(
     }
     throw error;
   }
+}
+
+// ─── Event Helpers ───
+
+function recordSkillResultEvent(
+  db: Database,
+  ctx: SkillDispatchContext,
+  skillId: string,
+  dispatchId: string,
+  result: SkillDispatchResult,
+): void {
+  const event = result.status === 'success' || result.status === 'partial'
+    ? buildSkillCompletedEvent(skillId, dispatchId, result)
+    : buildSkillFailedEvent(skillId, dispatchId, new Error('Dispatch failed'), result);
+  recordEddaEventWithConversation(db, ctx.sessionId, ctx.conversationId, event);
 }
 
 // ─── Queue Helpers ───
