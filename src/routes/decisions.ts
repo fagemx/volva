@@ -16,6 +16,12 @@ import { isProbeReady, packageProbe } from '../decision/probe-shell';
 import { buildForgeBuildRequest, type ForgeHandoffContext } from '../decision/forge-handoff';
 import { ForgeBuildResultSchema } from '../karvi-client/schemas';
 import { consumeForgeResult } from '../skills/telemetry-consumer';
+import {
+  buildForgeDispatchedEvent,
+  buildForgeCompletedEvent,
+  buildForgeFailedEvent,
+  recordEddaEvent,
+} from '../decision/edda-events';
 import type {
   IntentRoute,
   PathCheckResult,
@@ -488,11 +494,33 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
       const forgeContext: ForgeHandoffContext = { sessionId: session.id, workingDir, targetRepo };
       const forgeBuildRequest = buildForgeBuildRequest(syntheticMemo, forgeContext);
       let forgeResult: { buildId: string; status: string; pipeline: string } | null = null;
+      let forgeError: Error | null = null;
       if (deps.karvi) {
         try {
           forgeResult = await deps.karvi.forgeBuild(forgeBuildRequest);
+          if (forgeResult) {
+            recordEddaEvent(
+              deps.db,
+              session.id,
+              buildForgeDispatchedEvent(session.id, session.primaryRegime ?? 'economic', forgeResult.buildId),
+            );
+            recordEddaEvent(
+              deps.db,
+              session.id,
+              buildForgeCompletedEvent(session.id, forgeResult.buildId, {
+                status: forgeResult.status,
+                artifactCount: 0,
+              }),
+            );
+          }
         } catch (err) {
+          forgeError = err instanceof Error ? err : new Error(String(err));
           console.error('[forge] karvi.forgeBuild failed (fast-path):', err);
+          recordEddaEvent(
+            deps.db,
+            session.id,
+            buildForgeFailedEvent(session.id, 'unknown', forgeError),
+          );
         }
       }
 
@@ -534,6 +562,27 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
     // Override sessionId to match Volva's decision session (FK constraint)
     const resultWithSessionId = { ...parsed.data, sessionId: id };
     const outcome = consumeForgeResult(deps.db, resultWithSessionId, regime);
+
+    // Record Edda event based on outcome
+    if (outcome.outcome === 'success') {
+      recordEddaEvent(
+        deps.db,
+        id,
+        buildForgeCompletedEvent(id, outcome.buildId, {
+          status: parsed.data.status,
+          artifactCount: parsed.data.artifacts?.length ?? 0,
+          durationMs: parsed.data.durationMs,
+          costUsd: parsed.data.telemetry?.costUsd,
+          tokensUsed: parsed.data.telemetry?.tokensUsed,
+        }),
+      );
+    } else {
+      recordEddaEvent(
+        deps.db,
+        id,
+        buildForgeFailedEvent(id, outcome.buildId, new Error(`Forge build ${outcome.outcome}`)),
+      );
+    }
 
     return ok(c, { sessionId: id, buildId: outcome.buildId, outcome: outcome.outcome });
   });

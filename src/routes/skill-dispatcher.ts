@@ -8,12 +8,19 @@ import { KarviClient } from '../karvi-client/client';
 import { KarviNetworkError, KarviApiError } from '../karvi-client/schemas';
 import { mergeSkillObject } from '../skills/overlay-merge';
 import { recordRun } from '../skills/telemetry';
+import {
+  buildSkillDispatchedEvent,
+  buildSkillCompletedEvent,
+  buildSkillFailedEvent,
+  recordEddaEventWithConversation,
+} from '../decision/edda-events';
 
 // ─── Types ───
 
 export interface SkillDispatchContext {
   skillId: string;
   conversationId?: string;
+  sessionId?: string;
   userMessage: string;
   workingDir?: string;
   inputs: Record<string, string>;
@@ -154,6 +161,13 @@ export async function dispatchToKarvi(
   try {
     const dispatchResponse = await deps.karviClient.dispatchSkill(request);
 
+    recordEddaEventWithConversation(
+      deps.db,
+      ctx.sessionId,
+      ctx.conversationId,
+      buildSkillDispatchedEvent(merged.id, dispatchResponse.dispatchId, ctx),
+    );
+
     // 8. Poll for completion
     const result = await pollForCompletion(
       dispatchResponse.dispatchId,
@@ -169,6 +183,22 @@ export async function dispatchToKarvi(
       durationMs: result.durationMs,
       notes: `Karvi dispatch: ${dispatchResponse.dispatchId}`,
     });
+
+    if (result.status === 'success' || result.status === 'partial') {
+      recordEddaEventWithConversation(
+        deps.db,
+        ctx.sessionId,
+        ctx.conversationId,
+        buildSkillCompletedEvent(merged.id, dispatchResponse.dispatchId, result),
+      );
+    } else {
+      recordEddaEventWithConversation(
+        deps.db,
+        ctx.sessionId,
+        ctx.conversationId,
+        buildSkillFailedEvent(merged.id, dispatchResponse.dispatchId, new Error('Dispatch failed'), result),
+      );
+    }
 
     return { type: 'dispatched', result };
   } catch (error) {

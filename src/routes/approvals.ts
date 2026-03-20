@@ -6,6 +6,13 @@ import { dispatchToKarvi, resubmitWithApproval } from './skill-dispatcher';
 import type { SkillDispatchContext, DispatchDeps } from './skill-dispatcher';
 import type { SkillObjectLookup } from '../skills/types';
 import type { KarviClient } from '../karvi-client/client';
+import {
+  buildApprovalRequestedEvent,
+  buildApprovalGrantedEvent,
+  buildApprovalDeniedEvent,
+  buildApprovalExpiredEvent,
+  recordEddaEventWithConversation,
+} from '../decision/edda-events';
 
 // ─── Constants ───
 
@@ -26,6 +33,7 @@ export interface ApprovalDeps {
 const DispatchInputSchema = z.object({
   skillId: z.string().min(1),
   conversationId: z.string().optional(),
+  sessionId: z.string().optional(),
   userMessage: z.string().min(1),
   workingDir: z.string().optional(),
   inputs: z.record(z.string()).default({}),
@@ -64,6 +72,7 @@ export function approvalRoutes(deps: ApprovalDeps): Hono {
     const ctx: SkillDispatchContext = {
       skillId: parsed.data.skillId,
       conversationId: parsed.data.conversationId,
+      sessionId: parsed.data.sessionId,
       userMessage: parsed.data.userMessage,
       workingDir: parsed.data.workingDir,
       inputs: parsed.data.inputs,
@@ -78,6 +87,13 @@ export function approvalRoutes(deps: ApprovalDeps): Hono {
     if (outcome.type === 'approval_required') {
       const now = new Date();
       const expiresAt = new Date(now.getTime() + APPROVAL_TTL_MS).toISOString();
+
+      recordEddaEventWithConversation(
+        deps.db,
+        ctx.sessionId,
+        ctx.conversationId,
+        buildApprovalRequestedEvent(outcome.pendingId, outcome.skillName, outcome.permissions),
+      );
 
       // Persist audit row
       const auditId = `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -148,6 +164,15 @@ export function approvalRoutes(deps: ApprovalDeps): Hono {
         "UPDATE approval_audits SET decision = 'expired', decided_at = datetime('now') WHERE id = ?",
         [row.id as string],
       );
+
+      const ctxFromAudit = JSON.parse(row.dispatch_context_json as string) as SkillDispatchContext;
+      recordEddaEventWithConversation(
+        deps.db,
+        ctxFromAudit.sessionId,
+        ctxFromAudit.conversationId,
+        buildApprovalExpiredEvent(pendingId),
+      );
+
       return error(c, 'APPROVAL_EXPIRED', 'Approval token has expired (30 minute TTL exceeded)', 410);
     }
 
@@ -169,6 +194,13 @@ export function approvalRoutes(deps: ApprovalDeps): Hono {
     deps.db.run(
       "UPDATE approval_audits SET decision = 'approved', decided_by = ?, decided_at = ? WHERE id = ?",
       [approvalToken.approvedBy, now, row.id as string],
+    );
+
+    recordEddaEventWithConversation(
+      deps.db,
+      ctx.sessionId,
+      ctx.conversationId,
+      buildApprovalGrantedEvent(pendingId, approvalToken.approvedBy),
     );
 
     if (outcome.type === 'dispatched') {
@@ -202,6 +234,14 @@ export function approvalRoutes(deps: ApprovalDeps): Hono {
     deps.db.run(
       "UPDATE approval_audits SET decision = 'denied', decided_at = datetime('now') WHERE id = ?",
       [row.id as string],
+    );
+
+    const ctxFromAudit = JSON.parse(row.dispatch_context_json as string) as SkillDispatchContext;
+    recordEddaEventWithConversation(
+      deps.db,
+      ctxFromAudit.sessionId,
+      ctxFromAudit.conversationId,
+      buildApprovalDeniedEvent(pendingId),
     );
 
     return ok(c, { denied: true, pendingId });
