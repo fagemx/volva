@@ -159,7 +159,7 @@ describe('approvalRoutes', () => {
     initSchema(db);
   });
 
-  describe('POST /api/dispatch', () => {
+  describe('POST /api/dispatches', () => {
     it('returns dispatched when no approval required', async () => {
       const client = makeMockKarviClient();
       // Insert skill instance for telemetry
@@ -187,7 +187,7 @@ describe('approvalRoutes', () => {
 
       const app = createTestApp(db, makeSkillObject(), client);
 
-      const res = await jsonPost(app, '/api/dispatch', {
+      const res = await jsonPost(app, '/api/dispatches', {
         skillId: 'skill.deploy-service',
         userMessage: 'Deploy checkout-service',
         inputs: {},
@@ -208,7 +208,7 @@ describe('approvalRoutes', () => {
 
       const app = createTestApp(db, makeSkillObject(), client);
 
-      const res = await jsonPost(app, '/api/dispatch', {
+      const res = await jsonPost(app, '/api/dispatches', {
         skillId: 'skill.deploy-service',
         userMessage: 'Deploy checkout-service',
         inputs: {},
@@ -244,7 +244,7 @@ describe('approvalRoutes', () => {
       const client = makeMockKarviClient();
       const app = createTestApp(db, null, client);
 
-      const res = await jsonPost(app, '/api/dispatch', {
+      const res = await jsonPost(app, '/api/dispatches', {
         skillId: 'skill.nonexistent',
         userMessage: 'Do something',
         inputs: {},
@@ -260,12 +260,12 @@ describe('approvalRoutes', () => {
       const client = makeMockKarviClient();
       const app = createTestApp(db, makeSkillObject(), client);
 
-      const res = await jsonPost(app, '/api/dispatch', { userMessage: 'test' });
+      const res = await jsonPost(app, '/api/dispatches', { userMessage: 'test' });
       expect(res.status).toBe(400);
     });
   });
 
-  describe('POST /api/dispatch/approve', () => {
+  describe('POST /api/dispatches/approve', () => {
     it('re-submits with approval token on approve within TTL', async () => {
       const client = makeMockKarviClient();
 
@@ -316,7 +316,7 @@ describe('approvalRoutes', () => {
 
       const app = createTestApp(db, makeSkillObject(), client);
 
-      const res = await jsonPost(app, '/api/dispatch/approve', {
+      const res = await jsonPost(app, '/api/dispatches/approve', {
         pendingId: 'appr_abc123',
         approvedBy: 'alice',
       });
@@ -364,7 +364,7 @@ describe('approvalRoutes', () => {
 
       const app = createTestApp(db, makeSkillObject(), client);
 
-      const res = await jsonPost(app, '/api/dispatch/approve', {
+      const res = await jsonPost(app, '/api/dispatches/approve', {
         pendingId: 'appr_expired',
       });
 
@@ -384,7 +384,7 @@ describe('approvalRoutes', () => {
       const client = makeMockKarviClient();
       const app = createTestApp(db, makeSkillObject(), client);
 
-      const res = await jsonPost(app, '/api/dispatch/approve', {
+      const res = await jsonPost(app, '/api/dispatches/approve', {
         pendingId: 'appr_nonexistent',
       });
 
@@ -434,7 +434,7 @@ describe('approvalRoutes', () => {
 
       const app = createTestApp(db, makeSkillObject(), client);
 
-      await jsonPost(app, '/api/dispatch/approve', { pendingId: 'appr_default' });
+      await jsonPost(app, '/api/dispatches/approve', { pendingId: 'appr_default' });
 
       const sentRequest = client.dispatchSkill.mock.calls[0][0] as Record<string, unknown>;
       const token = sentRequest.approvalToken as Record<string, unknown>;
@@ -442,7 +442,7 @@ describe('approvalRoutes', () => {
     });
   });
 
-  describe('POST /api/dispatch/deny', () => {
+  describe('POST /api/dispatches/deny', () => {
     it('records denial and returns success', async () => {
       const client = makeMockKarviClient();
 
@@ -464,7 +464,7 @@ describe('approvalRoutes', () => {
 
       const app = createTestApp(db, makeSkillObject(), client);
 
-      const res = await jsonPost(app, '/api/dispatch/deny', {
+      const res = await jsonPost(app, '/api/dispatches/deny', {
         pendingId: 'appr_deny_me',
       });
 
@@ -489,7 +489,7 @@ describe('approvalRoutes', () => {
       const client = makeMockKarviClient();
       const app = createTestApp(db, makeSkillObject(), client);
 
-      const res = await jsonPost(app, '/api/dispatch/deny', {
+      const res = await jsonPost(app, '/api/dispatches/deny', {
         pendingId: 'appr_nonexistent',
       });
 
@@ -500,7 +500,7 @@ describe('approvalRoutes', () => {
       const client = makeMockKarviClient();
       const app = createTestApp(db, makeSkillObject(), client);
 
-      const res = await jsonPost(app, '/api/dispatch/deny', {});
+      const res = await jsonPost(app, '/api/dispatches/deny', {});
       expect(res.status).toBe(400);
     });
   });
