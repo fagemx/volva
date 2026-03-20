@@ -420,7 +420,7 @@ describe('dispatchToKarvi non-approval error codes', () => {
       readSkillContent: () => '# SKILL.md',
     };
 
-    await expect(dispatchToKarvi(makeContext(), deps)).rejects.toThrow('RATE_LIMITED');
+    await expect(dispatchToKarvi(makeContext(), deps)).rejects.toThrow('Too many requests');
   });
 
   it('re-throws INVALID_REQUEST error', async () => {
@@ -436,7 +436,7 @@ describe('dispatchToKarvi non-approval error codes', () => {
       readSkillContent: () => '# SKILL.md',
     };
 
-    await expect(dispatchToKarvi(makeContext(), deps)).rejects.toThrow('INVALID_REQUEST');
+    await expect(dispatchToKarvi(makeContext(), deps)).rejects.toThrow('Missing required field');
   });
 
   it('re-throws UNAUTHORIZED error', async () => {
@@ -452,7 +452,7 @@ describe('dispatchToKarvi non-approval error codes', () => {
       readSkillContent: () => '# SKILL.md',
     };
 
-    await expect(dispatchToKarvi(makeContext(), deps)).rejects.toThrow('UNAUTHORIZED');
+    await expect(dispatchToKarvi(makeContext(), deps)).rejects.toThrow('Invalid API key');
   });
 });
 
