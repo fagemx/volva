@@ -178,9 +178,12 @@ export function initSchema(db: Database): void {
       'signal_recorded','commit_drafted',
       'promotion_checked','spec_crystallized',
       'dispatch_cancelled','admission_checked',
-      'forge_build_recorded','settlement_initiated','settlement_completed'
+      'forge_build_recorded','settlement_initiated','settlement_completed',
+      'skill_dispatched','skill_completed','skill_failed',
+      'forge_dispatched','forge_completed','forge_failed',
+      'approval_requested','approval_granted','approval_denied','approval_expired'
     )),
-    object_type TEXT NOT NULL CHECK(object_type IN ('session','card','candidate','probe','signal','commit','promotion','settlement','forge_build','admission')),
+    object_type TEXT NOT NULL CHECK(object_type IN ('session','card','candidate','probe','signal','commit','promotion','settlement','forge_build','admission','dispatch','approval')),
     object_id TEXT NOT NULL,
     payload_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
