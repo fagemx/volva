@@ -176,6 +176,42 @@ export const GovernanceCommitMemoSchema = CommitMemoSchema.extend({
 });
 export type GovernanceCommitMemo = z.infer<typeof GovernanceCommitMemoSchema>;
 
+export const CapabilityCommitMemoSchema = CommitMemoSchema.extend({
+  skillDomain: z.string(),
+  currentLevel: z.string(),
+  targetLevel: z.string(),
+  proofMethod: z.string(),
+  milestones: z.array(z.string()),
+});
+export type CapabilityCommitMemo = z.infer<typeof CapabilityCommitMemoSchema>;
+
+export const LeverageCommitMemoSchema = CommitMemoSchema.extend({
+  leverageType: z.string(),
+  currentBottleneck: z.string(),
+  amplificationTarget: z.string(),
+  dependencies: z.array(z.string()),
+  riskIfNotBuilt: z.string(),
+});
+export type LeverageCommitMemo = z.infer<typeof LeverageCommitMemoSchema>;
+
+export const ExpressionCommitMemoSchema = CommitMemoSchema.extend({
+  medium: z.string(),
+  audience: z.string(),
+  coreMessage: z.string(),
+  styleConstraints: z.array(z.string()),
+  existingAssets: z.array(z.string()),
+});
+export type ExpressionCommitMemo = z.infer<typeof ExpressionCommitMemoSchema>;
+
+export const IdentityCommitMemoSchema = CommitMemoSchema.extend({
+  scope: z.string(),
+  coreValues: z.array(z.string()),
+  tensions: z.array(z.string()),
+  rituals: z.array(z.string()),
+  boundaries: z.array(z.string()),
+});
+export type IdentityCommitMemo = z.infer<typeof IdentityCommitMemoSchema>;
+
 // ─── Section 6: Canonical Cycle (type-only, no Zod for v0) ───
 
 export type WorldMode = 'setup' | 'open' | 'peak' | 'managed' | 'cooldown' | 'closed';
