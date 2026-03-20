@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { SkillStatus } from './skill-object';
 
 // ─── Section 1: Base Types ───
 
@@ -309,4 +310,30 @@ export type GovernanceAdjustment = {
   rationale: string;
   status: 'proposed' | 'approved' | 'applied' | 'rejected';
   createdAt: string;
+};
+
+// ─── Section 7: Dispatch Admission ───
+
+export const DispatchAdmissionResultSchema = z.object({
+  admitted: z.boolean(),
+  reason: z.string().optional(),
+  warnings: z.array(z.string()).optional(),
+  policyOverrides: z.object({
+    timeoutMinutes: z.number().optional(),
+    runtimeOptions: z.array(z.string()).optional(),
+  }).optional(),
+});
+export type DispatchAdmissionResult = z.infer<typeof DispatchAdmissionResultSchema>;
+
+export type AdmissionContext = {
+  sessionId: string;
+  userId?: string;
+  skillId: string;
+  skillName: string;
+  skillStatus: SkillStatus;
+  executionMode: 'advisory' | 'assistive' | 'active' | 'destructive';
+  externalSideEffects: boolean;
+  timeoutMinutes: number;
+  userConfirmedDestructive?: boolean;
+  budgetLimit?: number;
 };
