@@ -201,6 +201,33 @@ export class CardManager {
     };
   }
 
+  getActiveCards(conversationId: string): Map<CardType, CardEnvelope> {
+    const rows = this.db
+      .query('SELECT * FROM cards WHERE conversation_id = ? ORDER BY type, version DESC')
+      .all(conversationId) as Record<string, unknown>[];
+
+    const result = new Map<CardType, CardEnvelope>();
+    const seenTypes = new Set<CardType>();
+
+    for (const row of rows) {
+      const cardType = row.type as CardType;
+      if (seenTypes.has(cardType)) continue;
+      seenTypes.add(cardType);
+
+      result.set(cardType, {
+        id: row.id as string,
+        conversationId: row.conversation_id as string,
+        type: cardType,
+        content: JSON.parse(row.content as string) as AnyCard,
+        version: row.version as number,
+        createdAt: row.created_at as string,
+        updatedAt: row.updated_at as string,
+      });
+    }
+
+    return result;
+  }
+
   getVersionHistory(conversationId: string): CardEnvelope[] {
     const rows = this.db
       .query('SELECT * FROM cards WHERE conversation_id = ? ORDER BY version ASC')

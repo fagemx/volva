@@ -544,3 +544,26 @@ export function applyIntent(cardType: CardType, card: AnyCard, intent: Intent): 
       return applyIntentToOrgCard(card as OrgCard, intent);
   }
 }
+
+export function applyIntentToCards(
+  cards: Map<CardType, AnyCard>,
+  intent: Intent,
+): Map<CardType, AnyCard> {
+  const targetCards = intent.target_cards;
+
+  const cardsToUpdate = targetCards && targetCards.length > 0
+    ? targetCards
+    : Array.from(cards.keys());
+
+  const result = new Map<CardType, AnyCard>();
+
+  for (const [cardType, card] of cards) {
+    if (cardsToUpdate.includes(cardType)) {
+      result.set(cardType, applyIntent(cardType, card, intent));
+    } else {
+      result.set(cardType, card);
+    }
+  }
+
+  return result;
+}
