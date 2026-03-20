@@ -54,9 +54,30 @@ curl -X POST http://localhost:3461/api/projects \
 
 | Runtime | Tool | Best for | Sandbox |
 |---------|------|----------|---------|
+| `openai-api` | Direct HTTP (no CLI) | Any OpenAI-compatible API (z.ai, T8Star, Ollama) | No sandbox |
+| `claude-api` | Direct HTTP (no CLI) | Anthropic API direct | No sandbox |
 | `opencode` | opencode CLI | Flexible, supports custom providers | No sandbox |
 | `codex` | Codex CLI | OpenAI models, sandboxed execution | workspace-write |
 | `claude` | Claude Code CLI | Anthropic models | No sandbox |
+
+### openai-api runtime (recommended for z.ai / T8Star / Ollama)
+
+Direct HTTP call — no CLI needed. Karvi server handles conversation loop + tool execution (read_file, write_file, bash, list_directory, skill). Provider config from `opencode.json`.
+
+```bash
+# z.ai via openai-api (direct HTTP, no opencode CLI)
+npm run go -- <issue> --runtime openai-api --model zai-coding-plan/glm-5
+
+# T8Star via openai-api
+npm run go -- <issue> --runtime openai-api --model custom-ai-t8star-cn/gpt-5.3-codex-medium
+
+# Ollama via openai-api
+npm run go -- <issue> --runtime openai-api --model ollama-local/qwen3.5:35b-32k
+```
+
+**IMPORTANT**: z.ai GLM Coding Plan requires the dedicated coding endpoint:
+- ✅ `https://api.z.ai/api/coding/paas/v4` (coding scenarios)
+- ❌ `https://api.z.ai/api/paas/v4` (general — returns 429 for coding)
 
 ### Local models (Ollama)
 
@@ -273,6 +294,8 @@ To find available `<provider>/<model>` values, check `controls.model_map` or ask
 | `headBefore is not defined` crash | #582 引入的 scoping bug，已修（let → var）。如果遇到類似 retry-poller 誤判 "spawn failed"，先看 server log 真正的 error |
 | 非 GH 任務（custom ID）prompt 有 `gh issue view` | 已修：isGitHubIssue 分流，非 GH 任務用精簡 prompt 不含 gh CLI |
 | Agent prompt 裡的 `gh` 命令全部移除 | #595 已完成。所有 GitHub 操作由 Karvi server 透過 REST API 處理，agent 不需要 `gh` CLI |
+| z.ai 429 余额不足 | 使用 coding endpoint（`api.z.ai/api/coding/paas/v4`），不是 general endpoint |
+| openai-api runtime 比 opencode 更穩 | openai-api 直接 HTTP call，不經過 opencode CLI。推薦用於 z.ai/T8Star/Ollama |
 | Ollama provider 需要 `apiKey` 欄位 | Ollama 不驗 key，但 opencode SDK 要求欄位存在，填 `"apiKey": "ollama"` 在 options 裡 |
 
 ## Monitoring
