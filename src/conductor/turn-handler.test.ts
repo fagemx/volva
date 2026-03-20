@@ -550,6 +550,40 @@ describe('handleTurn', () => {
     expect(card!.type).toBe('world');
   });
 
+  it('returns fallback when parseIntent throws (LLM-02)', async () => {
+    mockParseIntent.mockRejectedValueOnce(new Error('LLM network error'));
+    mockGenerateReply.mockResolvedValueOnce('抱歉，請再說一次');
+
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'world_design', 'explore')");
+    const mgr = new CardManager(db);
+    const result = await handleTurn(mockLlm, mgr, 'conv1', '你好', 'explore');
+
+    expect(result.intent.type).toBe('off_topic');
+    expect(result.intent.summary).toBe('你好');
+    expect(result.reply).toBe('抱歉，請再說一次');
+    expect(result.phase).toBe('explore');
+  });
+
+  it('returns fallback reply when generateReply throws (LLM-02)', async () => {
+    mockParseIntent.mockResolvedValueOnce({
+      ok: true,
+      data: { type: 'new_intent', summary: '做客服' },
+    });
+    mockGenerateReply.mockRejectedValueOnce(new Error('LLM timeout'));
+
+    const db = createDb(':memory:');
+    initSchema(db);
+    db.run("INSERT INTO conversations (id, mode, phase) VALUES ('conv1', 'world_design', 'explore')");
+    const mgr = new CardManager(db);
+    const result = await handleTurn(mockLlm, mgr, 'conv1', '做客服', 'explore');
+
+    expect(result.intent.type).toBe('new_intent');
+    expect(result.reply).toContain('System error');
+    expect(result.phase).toBe('explore');
+  });
+
   it('falls back to off_topic when parseIntent LLM fails, card state and phase unchanged', async () => {
     // First turn: create a card with real content
     mockParseIntent.mockResolvedValueOnce({
