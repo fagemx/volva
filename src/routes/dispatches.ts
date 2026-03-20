@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import type { Database } from 'bun:sqlite';
 import { ok, error } from './response';
 import { KarviClient } from '../karvi-client/client';
@@ -12,6 +13,13 @@ export interface DispatchRouteDeps {
   db: Database;
 }
 
+// ─── Input Schemas ───
+
+const CancelDispatchInput = z.object({
+  sessionId: z.string().optional(),
+  reason: z.string().default('user_cancel'),
+});
+
 // ─── Route Factory ───
 
 export function dispatchRoutes(deps: DispatchRouteDeps): Hono {
@@ -21,9 +29,10 @@ export function dispatchRoutes(deps: DispatchRouteDeps): Hono {
   // Cancel an in-progress dispatch or build on Karvi (0 LLM calls)
   app.post('/api/dispatches/:id/cancel', async (c) => {
     const id = c.req.param('id');
-    const body: Record<string, unknown> = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-    const sessionId = typeof body.sessionId === 'string' ? body.sessionId : null;
-    const reason = typeof body.reason === 'string' ? body.reason : 'user_cancel';
+    const rawBody: unknown = await c.req.json().catch(() => ({}));
+    const parsed = CancelDispatchInput.safeParse(rawBody);
+    const sessionId = parsed.success ? (parsed.data.sessionId ?? null) : null;
+    const reason = parsed.success ? parsed.data.reason : 'user_cancel';
 
     try {
       const result = await deps.karvi.cancelDispatch(id);

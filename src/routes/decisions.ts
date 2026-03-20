@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import type { Database } from 'bun:sqlite';
 import { ok, error } from './response';
 import type { LLMClient } from '../llm/client';
@@ -33,6 +34,53 @@ export interface DecisionDeps {
   sessionManager: DecisionSessionManager;
   karvi?: KarviClient;
 }
+
+// ─── Input Schemas ───
+
+const StartDecisionInput = z.object({
+  userMessage: z.string().min(1),
+  conversationId: z.string().optional(),
+  userId: z.string().optional(),
+  title: z.string().optional(),
+});
+
+const ReclassifyInput = z.object({
+  userMessage: z.string().min(1),
+});
+
+const PathCheckInput = z.object({
+  domain: z.string().optional(),
+  form: z.string().optional(),
+  buyer: z.string().optional(),
+  loop: z.string().optional(),
+  buildTarget: z.string().optional(),
+  rawSignals: z.array(z.string()).optional(),
+});
+
+const SpaceBuildInput = z.object({
+  userMessage: z.string().optional(),
+  edgeProfile: z.array(z.string()).optional(),
+  timeHorizon: z.enum(['short', 'medium', 'long']).optional(),
+  maxSearchFriction: z.enum(['low', 'medium', 'high']).optional(),
+});
+
+const EvaluateInput = z.object({
+  candidateId: z.string().min(1),
+  signals: z.array(z.unknown()).optional(),
+});
+
+const RetryEvaluateInput = z.object({
+  candidateId: z.string().min(1),
+  additionalSignals: z.array(z.unknown()).optional(),
+});
+
+const ForgeInput = z.object({
+  confirmation: z.literal(true),
+  workingDir: z.string().optional(),
+  targetRepo: z.string().optional(),
+});
+
+const DecisionStatusFilter = z.enum(['active', 'paused', 'promoted', 'archived']);
 
 // ─── Helpers ───
 
@@ -84,26 +132,6 @@ function parseSignals(
     }
   }
   return signals;
-}
-
-function parseConstraints(body: Record<string, unknown>): KillFilterConstraints {
-  const constraints: KillFilterConstraints = {};
-  if (Array.isArray(body.edgeProfile)) {
-    constraints.edgeProfile = filterStrings(body.edgeProfile as unknown[]);
-  }
-  if (typeof body.timeHorizon === 'string') {
-    const th = body.timeHorizon;
-    if (th === 'short' || th === 'medium' || th === 'long') {
-      constraints.timeHorizon = th;
-    }
-  }
-  if (typeof body.maxSearchFriction === 'string') {
-    const msf = body.maxSearchFriction;
-    if (msf === 'low' || msf === 'medium' || msf === 'high') {
-      constraints.maxSearchFriction = msf;
-    }
-  }
-  return constraints;
 }
 
 function candidateToRealization(candidate: CandidateRow): RealizationCandidate {
@@ -201,16 +229,13 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
   // ─── POST /api/decisions/start ───
   // Create session + classify intent (1 LLM call)
   app.post('/api/decisions/start', async (c) => {
-    const body: Record<string, unknown> = await c.req.json();
-    const userMessage = body.userMessage;
-
-    if (!userMessage || typeof userMessage !== 'string') {
-      return error(c, 'INVALID_INPUT', 'userMessage is required', 400);
+    const body: unknown = await c.req.json();
+    const parsed = StartDecisionInput.safeParse(body);
+    if (!parsed.success) {
+      return error(c, 'INVALID_INPUT', parsed.error.issues[0].message, 400);
     }
 
-    const conversationId = typeof body.conversationId === 'string' ? body.conversationId : undefined;
-    const userId = typeof body.userId === 'string' ? body.userId : undefined;
-    const title = typeof body.title === 'string' ? body.title : undefined;
+    const { userMessage, conversationId, userId, title } = parsed.data;
 
     // LLM call #1: classify intent
     const intentRoute = await classifyIntent(deps.llm, userMessage);
@@ -241,12 +266,13 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
       return error(c, 'INVALID_STAGE', `Expected routing, got ${session.stage}`, 400);
     }
 
-    const body: Record<string, unknown> = await c.req.json();
-    const userMessage = body.userMessage;
-
-    if (!userMessage || typeof userMessage !== 'string') {
-      return error(c, 'INVALID_INPUT', 'userMessage is required', 400);
+    const body: unknown = await c.req.json();
+    const parsed = ReclassifyInput.safeParse(body);
+    if (!parsed.success) {
+      return error(c, 'INVALID_INPUT', parsed.error.issues[0].message, 400);
     }
+
+    const { userMessage } = parsed.data;
 
     // Build context with previous route
     const context: ClassifyIntentContext = {};
@@ -282,18 +308,20 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
       return error(c, 'MISSING_REGIME', 'No primaryRegime set (run start first)', 400);
     }
 
-    const body: Record<string, unknown> = await c.req.json();
-
-    // Build PathCheckContext from request body
-    const context: PathCheckContext = {};
-    if (typeof body.domain === 'string') context.domain = body.domain;
-    if (typeof body.form === 'string') context.form = body.form;
-    if (typeof body.buyer === 'string') context.buyer = body.buyer;
-    if (typeof body.loop === 'string') context.loop = body.loop;
-    if (typeof body.buildTarget === 'string') context.buildTarget = body.buildTarget;
-    if (Array.isArray(body.rawSignals)) {
-      context.rawSignals = filterStrings(body.rawSignals as unknown[]);
+    const body: unknown = await c.req.json();
+    const parsed = PathCheckInput.safeParse(body);
+    if (!parsed.success) {
+      return error(c, 'INVALID_INPUT', parsed.error.issues[0].message, 400);
     }
+
+    // Build PathCheckContext from validated data
+    const context: PathCheckContext = {};
+    if (parsed.data.domain) context.domain = parsed.data.domain;
+    if (parsed.data.form) context.form = parsed.data.form;
+    if (parsed.data.buyer) context.buyer = parsed.data.buyer;
+    if (parsed.data.loop) context.loop = parsed.data.loop;
+    if (parsed.data.buildTarget) context.buildTarget = parsed.data.buildTarget;
+    if (parsed.data.rawSignals) context.rawSignals = parsed.data.rawSignals;
 
     const intentRoute = buildIntentRouteFromSession(session);
     const pathCheckResult = checkPath(intentRoute, context);
@@ -321,12 +349,19 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
       return error(c, 'MISSING_REGIME', 'No primaryRegime set', 400);
     }
 
-    const body: Record<string, unknown> = await c.req.json();
-    const userMessage = typeof body.userMessage === 'string'
-      ? body.userMessage
-      : session.currentSummary ?? '';
+    const body: unknown = await c.req.json();
+    const parsed = SpaceBuildInput.safeParse(body);
+    if (!parsed.success) {
+      return error(c, 'INVALID_INPUT', parsed.error.issues[0].message, 400);
+    }
 
-    const constraints = parseConstraints(body);
+    const userMessage = parsed.data.userMessage ?? session.currentSummary ?? '';
+
+    const constraints: KillFilterConstraints = {};
+    if (parsed.data.edgeProfile) constraints.edgeProfile = parsed.data.edgeProfile;
+    if (parsed.data.timeHorizon) constraints.timeHorizon = parsed.data.timeHorizon;
+    if (parsed.data.maxSearchFriction) constraints.maxSearchFriction = parsed.data.maxSearchFriction;
+
     const intentRoute = buildIntentRouteFromSession(session);
 
     const pathCheck: PathCheckResult = {
@@ -381,11 +416,13 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
       return error(c, 'INVALID_STAGE', `Expected space-building, got ${session.stage}`, 400);
     }
 
-    const body: Record<string, unknown> = await c.req.json();
-    const candidateId = body.candidateId;
-    if (!candidateId || typeof candidateId !== 'string') {
-      return error(c, 'INVALID_INPUT', 'candidateId is required', 400);
+    const body: unknown = await c.req.json();
+    const parsed = EvaluateInput.safeParse(body);
+    if (!parsed.success) {
+      return error(c, 'INVALID_INPUT', parsed.error.issues[0].message, 400);
     }
+
+    const { candidateId } = parsed.data;
 
     const candidates = deps.sessionManager.getCandidates(session.id);
     const candidate = candidates.find((cd) => cd.id === candidateId);
@@ -399,7 +436,7 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
     }
 
     const probeableForm = packageProbe(realizationCandidate);
-    const rawSignals = Array.isArray(body.signals) ? body.signals as unknown[] : [];
+    const rawSignals = parsed.data.signals ?? [];
     const signals = parseSignals(rawSignals, candidateId, session.primaryRegime ?? 'economic');
 
     const commitMemo = buildCommitMemoFromSignals(
@@ -426,13 +463,14 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
       return error(c, 'INVALID_STAGE', `Expected commit-review, got ${session.stage}`, 400);
     }
 
-    const body: Record<string, unknown> = await c.req.json();
-    const candidateId = body.candidateId;
-    if (!candidateId || typeof candidateId !== 'string') {
-      return error(c, 'INVALID_INPUT', 'candidateId is required', 400);
+    const body: unknown = await c.req.json();
+    const parsed = RetryEvaluateInput.safeParse(body);
+    if (!parsed.success) {
+      return error(c, 'INVALID_INPUT', parsed.error.issues[0].message, 400);
     }
 
-    const rawSignals = Array.isArray(body.additionalSignals) ? body.additionalSignals as unknown[] : [];
+    const { candidateId } = parsed.data;
+    const rawSignals = parsed.data.additionalSignals ?? [];
     const additionalSignals = parseSignals(rawSignals, candidateId, session.primaryRegime ?? 'economic');
 
     // Reset to space-building, then re-advance
@@ -468,16 +506,24 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
 
     if (!session) return error(c, 'NOT_FOUND', 'Session not found', 404);
 
-    const body: Record<string, unknown> = await c.req.json();
+    const body: unknown = await c.req.json();
 
     // SETTLE-01: Forge requires explicit user confirmation
-    if (body.confirmation !== true) {
-      return error(c, 'CONFIRMATION_REQUIRED', 'Forge requires confirmation: true (CONTRACT SETTLE-01)', 400);
+    const parsed = ForgeInput.safeParse(body);
+    if (!parsed.success) {
+      // Check if it's specifically a confirmation issue
+      const isConfirmationIssue = parsed.error.issues.some(
+        (issue) => issue.path.includes('confirmation'),
+      );
+      if (isConfirmationIssue) {
+        return error(c, 'CONFIRMATION_REQUIRED', 'Forge requires confirmation: true (CONTRACT SETTLE-01)', 400);
+      }
+      return error(c, 'INVALID_INPUT', parsed.error.issues[0].message, 400);
     }
 
-    // Extract context fields from request body
-    const workingDir = typeof body.workingDir === 'string' ? body.workingDir : undefined;
-    const targetRepo = typeof body.targetRepo === 'string' ? body.targetRepo : undefined;
+    // Extract context fields from validated data
+    const workingDir = parsed.data.workingDir;
+    const targetRepo = parsed.data.targetRepo;
 
     // Fast-path: forge-fast-path at path-check stage
     if (session.routeDecision === 'forge-fast-path' && session.stage === 'path-check') {
@@ -524,7 +570,7 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
       return error(c, 'INVALID_STAGE', `Expected done, got ${session.stage}`, 400);
     }
 
-    const body: Record<string, unknown> = await c.req.json();
+    const body: unknown = await c.req.json();
     const parsed = ForgeBuildResultSchema.safeParse(body);
     if (!parsed.success) {
       return error(c, 'INVALID_INPUT', `Invalid ForgeBuildResult: ${parsed.error.message}`, 400);
@@ -546,9 +592,12 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
     let query = 'SELECT * FROM decision_sessions';
     const params: string[] = [];
 
-    if (status && ['active', 'paused', 'promoted', 'archived'].includes(status)) {
-      query += ' WHERE status = ?';
-      params.push(status);
+    if (status) {
+      const statusParsed = DecisionStatusFilter.safeParse(status);
+      if (statusParsed.success) {
+        query += ' WHERE status = ?';
+        params.push(statusParsed.data);
+      }
     }
 
     query += ' ORDER BY updated_at DESC';
