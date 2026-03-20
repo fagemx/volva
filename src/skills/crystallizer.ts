@@ -128,6 +128,7 @@ export function crystallize(candidate: SkillCandidate): CrystallizeResult {
     },
     dispatch: {
       mode: 'local',
+      fallback: 'local',
       targetSelection: { repoPolicy: 'explicit', runtimeOptions: [] },
       workerClass: [],
       handoff: { inputArtifacts: [], outputArtifacts: [] },

@@ -20,7 +20,7 @@ describe('DB Layer — initSchema', () => {
     initSchema(db);
   });
 
-  it('creates all 14 tables', () => {
+  it('creates all 15 tables', () => {
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all() as { name: string }[];
@@ -42,6 +42,8 @@ describe('DB Layer — initSchema', () => {
     expect(names).toContain('decision_events');
     // Approval audit table
     expect(names).toContain('approval_audits');
+    // Dispatch queue table
+    expect(names).toContain('dispatch_queue');
   });
 
   it('creates secondary indexes on high-frequency columns', () => {
@@ -55,6 +57,7 @@ describe('DB Layer — initSchema', () => {
     expect(names).toContain('idx_decision_sessions_status');
     expect(names).toContain('idx_candidate_records_session');
     expect(names).toContain('idx_approval_audits_pending');
+    expect(names).toContain('idx_dispatch_queue_status');
   });
 
   it('is idempotent (can call initSchema twice)', () => {
@@ -527,6 +530,43 @@ describe('DB Layer — initSchema', () => {
         "INSERT INTO decision_events (id, session_id, event_type, object_type, object_id) VALUES ('de1', 'nonexistent', 'route_assigned', 'session', 'ds1')"
       );
     }).toThrow();
+  });
+
+  // ── dispatch_queue ──
+
+  it('can insert and query a dispatch_queue entry', () => {
+    db.run(
+      `INSERT INTO dispatch_queue (id, skill_id, conversation_id, request_json, fallback_reason)
+       VALUES ('dq1', 'skill.deploy', 'conv_1', '{"skillId":"skill.deploy"}', 'Karvi health check failed')`,
+    );
+    const row = db
+      .prepare("SELECT * FROM dispatch_queue WHERE id = 'dq1'")
+      .get() as Record<string, unknown>;
+    expect(row.skill_id).toBe('skill.deploy');
+    expect(row.status).toBe('pending');
+    expect(row.retry_count).toBe(0);
+    expect(row.max_retries).toBe(3);
+  });
+
+  it('rejects dispatch_queue with invalid status', () => {
+    expect(() => {
+      db.run(
+        `INSERT INTO dispatch_queue (id, skill_id, request_json, fallback_reason, status)
+         VALUES ('dq2', 'skill.x', '{}', 'reason', 'invalid_status')`,
+      );
+    }).toThrow();
+  });
+
+  it('can update dispatch_queue status to dispatched', () => {
+    db.run(
+      `INSERT INTO dispatch_queue (id, skill_id, request_json, fallback_reason)
+       VALUES ('dq3', 'skill.deploy', '{}', 'reason')`,
+    );
+    db.run("UPDATE dispatch_queue SET status = 'dispatched', updated_at = datetime('now') WHERE id = 'dq3'");
+    const row = db
+      .prepare("SELECT status FROM dispatch_queue WHERE id = 'dq3'")
+      .get() as Record<string, unknown>;
+    expect(row.status).toBe('dispatched');
   });
 
   // ── approval_audits ──

@@ -22,7 +22,9 @@ export interface SkillDispatchContext {
 export type SkillDispatchOutcome =
   | { type: 'dispatched'; result: SkillDispatchResult }
   | { type: 'approval_required'; pendingId: string; skillName: string; permissions: SkillObject['environment']['permissions']; sideEffects: boolean; executionMode: string }
-  | { type: 'fallback_local'; reason: string };
+  | { type: 'fallback_local'; reason: string }
+  | { type: 'queued'; queueId: string; reason: string }
+  | { type: 'rejected'; reason: string };
 
 export interface DispatchDeps {
   skillObjectLookup: SkillObjectLookup;
@@ -118,7 +120,24 @@ export async function dispatchToKarvi(
     ? mergeSkillObject(skillObj, deps.dispatchOverlay)
     : skillObj;
 
-  // 4. Read SKILL.md content
+  // 4. Health check before dispatch
+  const health = await deps.karviClient.getHealth();
+  if (!health.ok) {
+    const fallbackStrategy = merged.dispatch.fallback;
+    const reason = 'Karvi health check failed';
+
+    switch (fallbackStrategy) {
+      case 'local':
+        console.warn('[skill-dispatcher] Karvi unhealthy, falling back to local');
+        return { type: 'fallback_local', reason };
+      case 'queue':
+        return enqueueDispatch(deps.db, merged, ctx, reason);
+      case 'reject':
+        return { type: 'rejected', reason };
+    }
+  }
+
+  // 5. Read SKILL.md content
   const readContent = deps.readSkillContent ?? readSkillMdContent;
   let skillContent: string;
   try {
@@ -128,21 +147,21 @@ export async function dispatchToKarvi(
     return { type: 'fallback_local', reason: 'Failed to read SKILL.md content' };
   }
 
-  // 5. Build request
+  // 6. Build request
   const request = buildDispatchRequest(merged, ctx, skillContent);
 
-  // 6. Dispatch to Karvi
+  // 7. Dispatch to Karvi
   try {
     const dispatchResponse = await deps.karviClient.dispatchSkill(request);
 
-    // 7. Poll for completion
+    // 8. Poll for completion
     const result = await pollForCompletion(
       dispatchResponse.dispatchId,
       deps.karviClient,
       merged.dispatch.executionPolicy.timeoutMinutes,
     );
 
-    // 8. Record telemetry
+    // 9. Record telemetry
     recordRun(deps.db, {
       skillInstanceId: ctx.skillId,
       conversationId: ctx.conversationId,
@@ -165,10 +184,20 @@ export async function dispatchToKarvi(
       };
     }
 
-    // Graceful fallback on network errors
+    // Graceful fallback on network errors — respects per-skill fallback strategy
     if (error instanceof KarviNetworkError) {
-      console.error('[skill-dispatcher] Karvi unreachable, falling back to local:', error.message);
-      return { type: 'fallback_local', reason: `Karvi unreachable: ${error.message}` };
+      const fallbackStrategy = merged.dispatch.fallback;
+      const reason = `Karvi unreachable: ${error.message}`;
+
+      switch (fallbackStrategy) {
+        case 'local':
+          console.error('[skill-dispatcher] Karvi unreachable, falling back to local:', error.message);
+          return { type: 'fallback_local', reason };
+        case 'queue':
+          return enqueueDispatch(deps.db, merged, ctx, reason);
+        case 'reject':
+          return { type: 'rejected', reason };
+      }
     }
 
     // Re-throw unexpected errors
@@ -206,6 +235,23 @@ export async function resubmitWithApproval(
     approvalToken,
   };
 
+  // Health check before resubmit
+  const health = await deps.karviClient.getHealth();
+  if (!health.ok) {
+    const fallbackStrategy = merged.dispatch.fallback;
+    const reason = 'Karvi health check failed on resubmit';
+
+    switch (fallbackStrategy) {
+      case 'local':
+        console.warn('[skill-dispatcher] Karvi unhealthy on resubmit, falling back to local');
+        return { type: 'fallback_local', reason };
+      case 'queue':
+        return enqueueDispatch(deps.db, merged, ctx, reason);
+      case 'reject':
+        return { type: 'rejected', reason };
+    }
+  }
+
   try {
     const dispatchResponse = await deps.karviClient.dispatchSkill(request);
 
@@ -226,11 +272,101 @@ export async function resubmitWithApproval(
     return { type: 'dispatched', result };
   } catch (error) {
     if (error instanceof KarviNetworkError) {
-      console.error('[skill-dispatcher] Karvi unreachable on resubmit:', error.message);
-      return { type: 'fallback_local', reason: `Karvi unreachable: ${error.message}` };
+      const fallbackStrategy = merged.dispatch.fallback;
+      const reason = `Karvi unreachable on resubmit: ${error.message}`;
+
+      switch (fallbackStrategy) {
+        case 'local':
+          console.error('[skill-dispatcher] Karvi unreachable on resubmit:', error.message);
+          return { type: 'fallback_local', reason };
+        case 'queue':
+          return enqueueDispatch(deps.db, merged, ctx, reason);
+        case 'reject':
+          return { type: 'rejected', reason };
+      }
     }
     throw error;
   }
+}
+
+// ─── Queue Helpers ───
+
+/**
+ * Enqueue a dispatch request for later retry when Karvi reconnects.
+ */
+function enqueueDispatch(
+  db: Database,
+  merged: SkillObject,
+  ctx: SkillDispatchContext,
+  reason: string,
+): SkillDispatchOutcome {
+  const queueId = `dq_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const request = buildDispatchRequest(merged, ctx, '');
+
+  db.prepare(
+    `INSERT INTO dispatch_queue (id, skill_id, conversation_id, request_json, fallback_reason, max_retries)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    queueId,
+    ctx.skillId,
+    ctx.conversationId ?? null,
+    JSON.stringify(request),
+    reason,
+    merged.dispatch.executionPolicy.retries,
+  );
+
+  return { type: 'queued', queueId, reason };
+}
+
+/**
+ * Process pending items in the dispatch queue.
+ * Checks Karvi health first — if unhealthy, returns immediately.
+ * On success, marks items as 'dispatched'. On failure, increments retry_count
+ * with exponential backoff, or marks as 'failed' when retries exhausted.
+ */
+export async function processDispatchQueue(
+  karviClient: KarviClient,
+  db: Database,
+): Promise<{ processed: number; succeeded: number; failed: number }> {
+  const health = await karviClient.getHealth();
+  if (!health.ok) return { processed: 0, succeeded: 0, failed: 0 };
+
+  const pending = db.prepare(
+    `SELECT * FROM dispatch_queue
+     WHERE status = 'pending' AND next_retry_at <= datetime('now')
+     ORDER BY created_at ASC LIMIT 10`,
+  ).all() as Array<Record<string, unknown>>;
+
+  let succeeded = 0;
+  let failed = 0;
+
+  for (const row of pending) {
+    const request = JSON.parse(row.request_json as string) as SkillDispatchRequest;
+    const rowId = row.id as string;
+    try {
+      await karviClient.dispatchSkill(request);
+      db.prepare(
+        `UPDATE dispatch_queue SET status = 'dispatched', updated_at = datetime('now') WHERE id = ?`,
+      ).run(rowId);
+      succeeded++;
+    } catch {
+      const retryCount = (row.retry_count as number) + 1;
+      const maxRetries = row.max_retries as number;
+      if (retryCount >= maxRetries) {
+        db.prepare(
+          `UPDATE dispatch_queue SET status = 'failed', retry_count = ?, updated_at = datetime('now') WHERE id = ?`,
+        ).run(retryCount, rowId);
+      } else {
+        const delayMinutes = Math.pow(2, retryCount - 1);
+        db.prepare(
+          `UPDATE dispatch_queue SET retry_count = ?, next_retry_at = datetime('now', '+' || ? || ' minutes'), updated_at = datetime('now') WHERE id = ?`,
+        ).run(retryCount, delayMinutes, rowId);
+      }
+      failed++;
+    }
+  }
+
+  return { processed: pending.length, succeeded, failed };
 }
 
 // ─── Internal Helpers ───

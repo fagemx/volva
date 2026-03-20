@@ -6,6 +6,7 @@ import {
   RiskTierEnum,
   ExecutionModeEnum,
   DispatchModeEnum,
+  FallbackStrategyEnum,
   IdentitySchema,
   PurposeSchema,
   RoutingSchema,
@@ -244,6 +245,18 @@ describe('DispatchModeEnum', () => {
   });
 });
 
+describe('FallbackStrategyEnum', () => {
+  it('accepts all valid values', () => {
+    for (const v of ['local', 'queue', 'reject']) {
+      expect(FallbackStrategyEnum.parse(v)).toBe(v);
+    }
+  });
+
+  it('rejects invalid value', () => {
+    expect(() => FallbackStrategyEnum.parse('retry')).toThrow();
+  });
+});
+
 // ─── Section Schema Tests ───
 
 describe('IdentitySchema', () => {
@@ -428,6 +441,24 @@ describe('DispatchSchema', () => {
         ...validDispatch,
         executionPolicy: { ...validDispatch.executionPolicy, timeoutMinutes: 0 },
       }).success,
+    ).toBe(false);
+  });
+
+  it('defaults fallback to local when omitted', () => {
+    const result = DispatchSchema.parse(validDispatch);
+    expect(result.fallback).toBe('local');
+  });
+
+  it('accepts explicit fallback values', () => {
+    for (const v of ['local', 'queue', 'reject'] as const) {
+      const result = DispatchSchema.parse({ ...validDispatch, fallback: v });
+      expect(result.fallback).toBe(v);
+    }
+  });
+
+  it('rejects invalid fallback value', () => {
+    expect(
+      DispatchSchema.safeParse({ ...validDispatch, fallback: 'retry' }).success,
     ).toBe(false);
   });
 });
