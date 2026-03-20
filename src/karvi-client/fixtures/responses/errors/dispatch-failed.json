@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "DISPATCH_FAILED",
+    "message": "Skill dispatch execution failed"
+  }
+}

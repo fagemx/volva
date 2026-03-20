@@ -61,6 +61,20 @@ export const KarviErrorResponseSchema = z.object({
   }),
 });
 
+export const KARVI_ERROR_CODES = [
+  'NOT_FOUND',
+  'APPROVAL_REQUIRED',
+  'EMPTY_BUILD',
+  'ALREADY_CANCELLED',
+  'INVALID_REQUEST',
+  'DISPATCH_FAILED',
+  'TIMEOUT',
+  'UNAUTHORIZED',
+  'RATE_LIMITED',
+] as const;
+
+export type KarviErrorCode = typeof KARVI_ERROR_CODES[number];
+
 export function karviSuccess<T extends z.ZodTypeAny>(dataSchema: T) {
   return z.object({
     ok: z.literal(true),

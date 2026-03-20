@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "EMPTY_BUILD",
+    "message": "whatToBuild array is empty"
+  }
+}

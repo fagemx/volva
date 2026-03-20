@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "ALREADY_CANCELLED",
+    "message": "Dispatch has already been cancelled"
+  }
+}

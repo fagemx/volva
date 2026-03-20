@@ -1,0 +1,24 @@
+{
+  "sessionId": "session-002",
+  "candidateId": "candidate-002",
+  "regime": "governance",
+  "verdict": "commit",
+  "whatToBuild": ["governance framework"],
+  "whatNotToBuild": ["law patches"],
+  "rationale": ["community demand validated"],
+  "evidenceUsed": ["survey results"],
+  "unresolvedRisks": ["participation uncertainty"],
+  "regimeContext": {
+    "kind": "governance",
+    "worldForm": "commons",
+    "minimumWorldShape": ["constitution draft", "voting mechanism"],
+    "firstCycleDesign": ["proposal flow", "judgment layer"],
+    "stateDensityAssessment": "medium",
+    "governancePressureAssessment": "high",
+    "thyraHandoffRequirements": ["world initialization"]
+  },
+  "context": {
+    "workingDir": "/tmp/build",
+    "targetRepo": "org/repo"
+  }
+}

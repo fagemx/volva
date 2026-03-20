@@ -1,0 +1,27 @@
+{
+  "skillId": "skill.arch-spec",
+  "status": "success",
+  "durationMs": 45000,
+  "steps": [
+    {
+      "stepId": "step-001",
+      "type": "analyze",
+      "status": "success",
+      "artifacts": ["analysis.md"]
+    }
+  ],
+  "outputs": {
+    "spec_doc": "path/to/spec.md"
+  },
+  "verification": {
+    "smokeChecksPassed": true,
+    "failedChecks": []
+  },
+  "telemetry": {
+    "tokensUsed": 15000,
+    "costUsd": 0.45,
+    "runtime": "claude",
+    "model": "claude-3-sonnet",
+    "stepsExecuted": 1
+  }
+}
