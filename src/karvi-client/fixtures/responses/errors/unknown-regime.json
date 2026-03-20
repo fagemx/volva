@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "UNKNOWN_REGIME",
+    "message": "Regime 'identity' is not supported for forge build"
+  }
+}
