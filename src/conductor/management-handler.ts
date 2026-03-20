@@ -48,8 +48,14 @@ export async function handleManagementTurn(
   // Use village context as "card snapshot" for intent parsing
   const villageContext = await fetchVillageContext(thyra, villageId);
 
-  // LLM #1: parse intent
-  const intent = await parseIntent(llm, userMessage, villageContext);
+  // LLM #1: parse intent (CONTRACT LLM-02: must try/catch)
+  let intent: Intent;
+  try {
+    intent = await parseIntent(llm, userMessage, villageContext);
+  } catch (error) {
+    console.error('[handleManagementTurn] parseIntent threw:', error);
+    intent = { type: 'off_topic', summary: userMessage };
+  }
 
   const isQuery = intent.type === 'query_status' || intent.type === 'query_history';
   const action: 'query' | 'none' = isQuery ? 'query' : 'none';
@@ -58,8 +64,14 @@ export async function handleManagementTurn(
   const replyContext = isQuery ? villageContext : `(Management mode — village: ${villageId})`;
   const strategy: Strategy = 'probe';
 
-  // LLM #2: generate reply
-  const reply = await generateReply(llm, strategy, replyContext, userMessage);
+  // LLM #2: generate reply (CONTRACT LLM-02: must try/catch)
+  let reply: string;
+  try {
+    reply = await generateReply(llm, strategy, replyContext, userMessage);
+  } catch (error) {
+    console.error('[handleManagementTurn] generateReply threw:', error);
+    reply = '(System error during reply generation. Please try again.)';
+  }
 
   return { reply, intent, action, strategy };
 }
