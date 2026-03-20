@@ -2,6 +2,7 @@
   "ok": false,
   "error": {
     "code": "APPROVAL_REQUIRED",
-    "message": "Human approval required before dispatch"
+    "message": "Human approval required before dispatch",
+    "pendingApprovalId": "pending-001"
   }
 }

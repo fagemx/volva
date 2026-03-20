@@ -1,8 +1,9 @@
 {
   "event": "progress",
   "data": {
+    "stepId": "step-001",
+    "message": "Analyzing codebase structure",
     "percent": 50,
-    "message": "Processing step 2 of 4",
     "timestamp": "2026-03-19T00:00:30Z"
   }
 }

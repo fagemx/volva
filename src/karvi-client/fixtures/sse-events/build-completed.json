@@ -1,9 +1,10 @@
 {
   "event": "build_completed",
   "data": {
-    "buildId": "build-456",
     "sessionId": "session-001",
     "status": "success",
-    "timestamp": "2026-03-19T00:05:00Z"
+    "durationMs": 120000,
+    "artifacts": ["src/index.ts"],
+    "timestamp": "2026-03-19T00:02:00Z"
   }
 }

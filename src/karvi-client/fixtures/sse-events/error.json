@@ -2,7 +2,7 @@
   "event": "error",
   "data": {
     "code": "DISPATCH_FAILED",
-    "message": "Execution failed at step 2",
-    "timestamp": "2026-03-19T00:01:30Z"
+    "message": "Execution failed at step analyze",
+    "timestamp": "2026-03-19T00:00:30Z"
   }
 }
