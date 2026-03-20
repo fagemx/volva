@@ -53,8 +53,8 @@ export function approvalRoutes(deps: ApprovalDeps): Hono {
     dispatchOverlay: deps.dispatchOverlay,
   };
 
-  // ─── POST /api/dispatch ───
-  app.post('/api/dispatch', async (c) => {
+  // ─── POST /api/dispatches ───
+  app.post('/api/dispatches', async (c) => {
     const body: unknown = await c.req.json();
     const parsed = DispatchInputSchema.safeParse(body);
     if (!parsed.success) {
@@ -121,8 +121,8 @@ export function approvalRoutes(deps: ApprovalDeps): Hono {
     return ok(c, { type: 'fallback_local' as const, reason: outcome.reason });
   });
 
-  // ─── POST /api/dispatch/approve ───
-  app.post('/api/dispatch/approve', async (c) => {
+  // ─── POST /api/dispatches/approve ───
+  app.post('/api/dispatches/approve', async (c) => {
     const body: unknown = await c.req.json();
     const parsed = ApproveInputSchema.safeParse(body);
     if (!parsed.success) {
@@ -179,8 +179,8 @@ export function approvalRoutes(deps: ApprovalDeps): Hono {
     return ok(c, { type: 'fallback_local' as const, reason: outcome.type === 'fallback_local' ? outcome.reason : 'Unexpected outcome' });
   });
 
-  // ─── POST /api/dispatch/deny ───
-  app.post('/api/dispatch/deny', async (c) => {
+  // ─── POST /api/dispatches/deny ───
+  app.post('/api/dispatches/deny', async (c) => {
     const body: unknown = await c.req.json();
     const parsed = DenyInputSchema.safeParse(body);
     if (!parsed.success) {
