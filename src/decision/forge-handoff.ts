@@ -10,6 +10,7 @@ import type {
   Regime,
   WorldForm,
 } from '../schemas/decision';
+import { WorldFormEnum } from '../schemas/decision';
 import { ForgeBuildRequestSchema, type ForgeBuildRequest } from '../karvi-client/schemas';
 
 // ─── Context for Forge Handoff ───
@@ -325,7 +326,8 @@ function buildSyntheticEconomic(baseMemo: CommitMemo, fields: SyntheticFields, p
 }
 
 function buildSyntheticGovernance(baseMemo: CommitMemo, fields: SyntheticFields, pcr: PathCheckResult): GovernanceCommitMemo {
-  const worldForm: WorldForm = fields.form ? (fields.form as WorldForm) : 'market';
+  const parsed = WorldFormEnum.safeParse(fields.form);
+  const worldForm: WorldForm = parsed.success ? parsed.data : 'market';
   return {
     ...baseMemo,
     selectedWorldForm: worldForm,

@@ -563,6 +563,21 @@ describe('buildSyntheticCommitMemo', () => {
     expect(result.unresolvedRisks).toContain('signal: No pricing data yet');
   });
 
+  it('falls back to market when governance form is invalid', () => {
+    const pcr = makePathCheckResult({
+      fixedElements: [
+        { kind: 'domain', value: 'community-garden' },
+        { kind: 'form', value: 'invalid_form_value' },
+        { kind: 'build_target', value: 'Garden governance world' },
+      ],
+    });
+    const result = buildSyntheticCommitMemo(pcr, 'governance');
+
+    expect(result.regime).toBe('governance');
+    const gov = result as GovernanceCommitMemo;
+    expect(gov.selectedWorldForm).toBe('market');
+  });
+
   it('handles missing fixedElements gracefully', () => {
     const pcr = makePathCheckResult({
       fixedElements: [],
