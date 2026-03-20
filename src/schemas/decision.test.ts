@@ -16,6 +16,10 @@ import {
   CommitMemoSchema,
   EconomicCommitMemoSchema,
   GovernanceCommitMemoSchema,
+  CapabilityCommitMemoSchema,
+  LeverageCommitMemoSchema,
+  ExpressionCommitMemoSchema,
+  IdentityCommitMemoSchema,
 } from './decision';
 
 // ─── Enum Tests ───
@@ -485,6 +489,134 @@ describe('GovernanceCommitMemoSchema', () => {
       Object.entries(validGovMemo).filter(([k]) => k !== 'selectedWorldForm'),
     );
     const result = GovernanceCommitMemoSchema.safeParse(without);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('CapabilityCommitMemoSchema', () => {
+  const validCapMemo = {
+    candidateId: 'cand-1',
+    regime: 'capability',
+    verdict: 'commit',
+    rationale: ['skill gap'],
+    evidenceUsed: ['assessment'],
+    unresolvedRisks: [],
+    whatForgeShouldBuild: ['practice loop'],
+    whatForgeMustNotBuild: [],
+    recommendedNextStep: ['start practice'],
+    skillDomain: 'data-analysis',
+    currentLevel: 'beginner',
+    targetLevel: 'intermediate',
+    proofMethod: 'portfolio',
+    milestones: ['case study 1', 'case study 2'],
+  };
+
+  it('parses valid capability commit memo', () => {
+    const result = CapabilityCommitMemoSchema.safeParse(validCapMemo);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects missing capability-specific fields', () => {
+    const without = Object.fromEntries(
+      Object.entries(validCapMemo).filter(([k]) => k !== 'skillDomain'),
+    );
+    const result = CapabilityCommitMemoSchema.safeParse(without);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('LeverageCommitMemoSchema', () => {
+  const validLevMemo = {
+    candidateId: 'cand-1',
+    regime: 'leverage',
+    verdict: 'commit',
+    rationale: ['bottleneck identified'],
+    evidenceUsed: ['time tracking'],
+    unresolvedRisks: [],
+    whatForgeShouldBuild: ['automation pipeline'],
+    whatForgeMustNotBuild: [],
+    recommendedNextStep: ['deploy MVP'],
+    leverageType: 'automation',
+    currentBottleneck: 'manual data entry',
+    amplificationTarget: '5x throughput',
+    dependencies: ['API access'],
+    riskIfNotBuilt: 'team burnout',
+  };
+
+  it('parses valid leverage commit memo', () => {
+    const result = LeverageCommitMemoSchema.safeParse(validLevMemo);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects missing leverage-specific fields', () => {
+    const without = Object.fromEntries(
+      Object.entries(validLevMemo).filter(([k]) => k !== 'leverageType'),
+    );
+    const result = LeverageCommitMemoSchema.safeParse(without);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('ExpressionCommitMemoSchema', () => {
+  const validExpMemo = {
+    candidateId: 'cand-1',
+    regime: 'expression',
+    verdict: 'commit',
+    rationale: ['brand needed'],
+    evidenceUsed: ['feedback'],
+    unresolvedRisks: [],
+    whatForgeShouldBuild: ['landing page'],
+    whatForgeMustNotBuild: [],
+    recommendedNextStep: ['launch'],
+    medium: 'website',
+    audience: 'developers',
+    coreMessage: 'tools for craft',
+    styleConstraints: ['minimalist'],
+    existingAssets: ['logo'],
+  };
+
+  it('parses valid expression commit memo', () => {
+    const result = ExpressionCommitMemoSchema.safeParse(validExpMemo);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects missing expression-specific fields', () => {
+    const without = Object.fromEntries(
+      Object.entries(validExpMemo).filter(([k]) => k !== 'medium'),
+    );
+    const result = ExpressionCommitMemoSchema.safeParse(without);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('IdentityCommitMemoSchema', () => {
+  const validIdMemo = {
+    candidateId: 'cand-1',
+    regime: 'identity',
+    verdict: 'commit',
+    rationale: ['culture definition needed'],
+    evidenceUsed: ['survey'],
+    unresolvedRisks: [],
+    whatForgeShouldBuild: ['values framework'],
+    whatForgeMustNotBuild: [],
+    recommendedNextStep: ['workshop'],
+    scope: 'engineering-team',
+    coreValues: ['craft', 'autonomy'],
+    tensions: ['speed vs quality'],
+    rituals: ['weekly retro'],
+    boundaries: ['no blame'],
+  };
+
+  it('parses valid identity commit memo', () => {
+    const result = IdentityCommitMemoSchema.safeParse(validIdMemo);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects missing identity-specific fields', () => {
+    const without = Object.fromEntries(
+      Object.entries(validIdMemo).filter(([k]) => k !== 'scope'),
+    );
+    const result = IdentityCommitMemoSchema.safeParse(without);
     expect(result.success).toBe(false);
   });
 });

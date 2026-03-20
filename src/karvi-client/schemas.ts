@@ -236,6 +236,42 @@ const GovernanceForgeContextSchema = z.object({
   thyraHandoffRequirements: z.array(z.string()),
 });
 
+const CapabilityForgeContextSchema = z.object({
+  kind: z.literal('capability'),
+  skillDomain: z.string(),
+  currentLevel: z.string(),
+  targetLevel: z.string(),
+  proofMethod: z.string(),
+  milestones: z.array(z.string()),
+});
+
+const LeverageForgeContextSchema = z.object({
+  kind: z.literal('leverage'),
+  leverageType: z.string(),
+  currentBottleneck: z.string(),
+  amplificationTarget: z.string(),
+  dependencies: z.array(z.string()),
+  riskIfNotBuilt: z.string(),
+});
+
+const ExpressionForgeContextSchema = z.object({
+  kind: z.literal('expression'),
+  medium: z.string(),
+  audience: z.string(),
+  coreMessage: z.string(),
+  styleConstraints: z.array(z.string()),
+  existingAssets: z.array(z.string()),
+});
+
+const IdentityForgeContextSchema = z.object({
+  kind: z.literal('identity'),
+  scope: z.string(),
+  coreValues: z.array(z.string()),
+  tensions: z.array(z.string()),
+  rituals: z.array(z.string()),
+  boundaries: z.array(z.string()),
+});
+
 export const ForgeBuildRequestSchema = z.object({
   sessionId: z.string(),
   candidateId: z.string(),
@@ -246,7 +282,14 @@ export const ForgeBuildRequestSchema = z.object({
   rationale: z.array(z.string()),
   evidenceUsed: z.array(z.string()),
   unresolvedRisks: z.array(z.string()),
-  regimeContext: z.discriminatedUnion('kind', [EconomicForgeContextSchema, GovernanceForgeContextSchema]),
+  regimeContext: z.discriminatedUnion('kind', [
+    EconomicForgeContextSchema,
+    GovernanceForgeContextSchema,
+    CapabilityForgeContextSchema,
+    LeverageForgeContextSchema,
+    ExpressionForgeContextSchema,
+    IdentityForgeContextSchema,
+  ]),
   context: z.object({
     workingDir: z.string().optional(),
     targetRepo: z.string().optional(),
