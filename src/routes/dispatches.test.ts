@@ -12,6 +12,7 @@ function makeMockKarviClient(): KarviClient & {
   cancelDispatch: ReturnType<typeof vi.fn>;
   getHealth: ReturnType<typeof vi.fn>;
   dispatchSkill: ReturnType<typeof vi.fn>;
+  getDispatchStatus: ReturnType<typeof vi.fn>;
 } {
   const client = {
     cancelDispatch: vi.fn(),
@@ -26,6 +27,7 @@ function makeMockKarviClient(): KarviClient & {
     cancelDispatch: ReturnType<typeof vi.fn>;
     getHealth: ReturnType<typeof vi.fn>;
     dispatchSkill: ReturnType<typeof vi.fn>;
+    getDispatchStatus: ReturnType<typeof vi.fn>;
   };
   return client;
 }

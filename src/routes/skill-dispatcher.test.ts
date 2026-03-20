@@ -215,33 +215,11 @@ describe('dispatchToKarvi', () => {
     }
   });
 
-  it('returns dispatched on successful Karvi execution', async () => {
-    // Insert skill instance for telemetry foreign key
-    db.prepare(
-      `INSERT INTO skill_instances (id, skill_id, name, status, run_count, success_count)
-       VALUES (?, ?, ?, ?, 0, 0)`,
-    ).run('skill.deploy-service', 'skill.deploy-service', 'deploy-service', 'promoted');
-
+  it('returns dispatched on successful Karvi dispatch', async () => {
     const client = makeMockKarviClient();
     client.dispatchSkill.mockResolvedValueOnce({
       dispatchId: 'dispatch_001',
       status: 'pending',
-    });
-    client.getDispatchStatus.mockResolvedValueOnce({
-      id: 'dispatch_001',
-      status: 'completed',
-      type: 'skill',
-      createdAt: '2026-01-01',
-      updatedAt: '2026-01-01',
-      result: {
-        skillId: 'skill.deploy-service',
-        status: 'success',
-        durationMs: 5000,
-        steps: [{ stepId: 'plan', type: 'plan', status: 'success', artifacts: [] }],
-        outputs: { deploy_url: 'https://staging.example.com' },
-        verification: { smokeChecksPassed: true, failedChecks: [] },
-        telemetry: { tokensUsed: 1000, costUsd: 0.05, runtime: 'claude', model: 'claude-sonnet-4-5-20250514', stepsExecuted: 1 },
-      },
     });
 
     const deps: DispatchDeps = {
@@ -254,8 +232,8 @@ describe('dispatchToKarvi', () => {
     const result = await dispatchToKarvi(makeContext(), deps);
     expect(result.type).toBe('dispatched');
     if (result.type === 'dispatched') {
-      expect(result.result.status).toBe('success');
-      expect(result.result.outputs.deploy_url).toBe('https://staging.example.com');
+      expect(result.dispatchId).toBe('dispatch_001');
+      expect(result.status).toBe('pending');
     }
 
     // Verify dispatchSkill was called with correct request
@@ -263,6 +241,9 @@ describe('dispatchToKarvi', () => {
     const sentRequest = client.dispatchSkill.mock.calls[0][0];
     expect(sentRequest.skillId).toBe('skill.deploy-service');
     expect(sentRequest.skillContent).toBe('# Deploy SKILL.md');
+
+    // Verify getDispatchStatus was NOT called (no polling)
+    expect(client.getDispatchStatus).not.toHaveBeenCalled();
   });
 
   it('returns approval_required when Karvi requires approval', async () => {
@@ -342,58 +323,6 @@ describe('dispatchToKarvi', () => {
     if (result.type === 'fallback_local') {
       expect(result.reason).toContain('Failed to read SKILL.md');
     }
-  });
-
-  it('records telemetry after successful dispatch', async () => {
-    const client = makeMockKarviClient();
-    client.dispatchSkill.mockResolvedValueOnce({
-      dispatchId: 'dispatch_002',
-      status: 'pending',
-    });
-    client.getDispatchStatus.mockResolvedValueOnce({
-      id: 'dispatch_002',
-      status: 'completed',
-      type: 'skill',
-      createdAt: '2026-01-01',
-      updatedAt: '2026-01-01',
-      result: {
-        skillId: 'skill.deploy-service',
-        status: 'success',
-        durationMs: 3000,
-        steps: [],
-        outputs: {},
-        verification: { smokeChecksPassed: true, failedChecks: [] },
-        telemetry: { tokensUsed: 500, costUsd: 0.02, runtime: 'claude', model: 'claude-sonnet-4-5-20250514', stepsExecuted: 0 },
-      },
-    });
-
-    // Insert a skill_instance record so telemetry recording works
-    db.prepare(
-      `INSERT INTO skill_instances (id, skill_id, name, status, run_count, success_count)
-       VALUES (?, ?, ?, ?, 0, 0)`,
-    ).run('skill.deploy-service', 'skill.deploy-service', 'deploy-service', 'promoted');
-
-    const deps: DispatchDeps = {
-      skillObjectLookup: makeLookup(makeSkillObject()),
-      karviClient: client,
-      db,
-      readSkillContent: () => '# SKILL.md',
-    };
-
-    await dispatchToKarvi(makeContext(), deps);
-
-    // Check that run was recorded
-    const runs = db.prepare('SELECT * FROM skill_runs WHERE skill_instance_id = ?')
-      .all('skill.deploy-service') as Array<Record<string, unknown>>;
-    expect(runs).toHaveLength(1);
-    expect(runs[0].outcome).toBe('success');
-    expect(runs[0].duration_ms).toBe(3000);
-
-    // Check counters updated
-    const instance = db.prepare('SELECT run_count, success_count FROM skill_instances WHERE id = ?')
-      .get('skill.deploy-service') as Record<string, unknown>;
-    expect(instance.run_count).toBe(1);
-    expect(instance.success_count).toBe(1);
   });
 });
 
@@ -747,102 +676,6 @@ describe('processDispatchQueue', () => {
   });
 });
 
-// ─── timeout auto-cancel ───
-
-describe('pollForCompletion auto-cancel on timeout', () => {
-  let db: Database;
-
-  beforeEach(() => {
-    db = createDb(':memory:');
-    initSchema(db);
-  });
-
-  it('calls cancelDispatch when polling times out', async () => {
-    // Insert skill instance for telemetry recording
-    db.prepare(
-      `INSERT INTO skill_instances (id, skill_id, name, status, run_count, success_count)
-       VALUES (?, ?, ?, ?, 0, 0)`,
-    ).run('skill.deploy-service', 'skill.deploy-service', 'deploy-service', 'promoted');
-
-    const client = makeMockKarviClient();
-    client.dispatchSkill.mockResolvedValueOnce({
-      dispatchId: 'dispatch_timeout',
-      status: 'pending',
-    });
-    // Always return 'running' so it times out
-    client.getDispatchStatus.mockResolvedValue({
-      id: 'dispatch_timeout',
-      status: 'running',
-      type: 'skill',
-      createdAt: '2026-01-01',
-      updatedAt: '2026-01-01',
-      result: null,
-    });
-    client.cancelDispatch.mockResolvedValueOnce({ id: 'dispatch_timeout', cancelled: true });
-
-    // Use a skill with very short timeout to avoid slow test
-    const skillObj = makeSkillObject();
-    skillObj.dispatch.executionPolicy.timeoutMinutes = 0; // 0 minutes = 0 poll attempts
-
-    const deps: DispatchDeps = {
-      skillObjectLookup: makeLookup(skillObj),
-      karviClient: client,
-      db,
-      readSkillContent: () => '# SKILL.md',
-    };
-
-    const result = await dispatchToKarvi(makeContext(), deps);
-    expect(result.type).toBe('dispatched');
-    if (result.type === 'dispatched') {
-      expect(result.result.status).toBe('failure');
-      expect(result.result.verification.failedChecks).toContain('timeout');
-    }
-
-    // Verify cancelDispatch was called
-    expect(client.cancelDispatch).toHaveBeenCalledWith('dispatch_timeout');
-  });
-
-  it('still returns timeout result when cancelDispatch fails', async () => {
-    db.prepare(
-      `INSERT INTO skill_instances (id, skill_id, name, status, run_count, success_count)
-       VALUES (?, ?, ?, ?, 0, 0)`,
-    ).run('skill.deploy-service', 'skill.deploy-service', 'deploy-service', 'promoted');
-
-    const client = makeMockKarviClient();
-    client.dispatchSkill.mockResolvedValueOnce({
-      dispatchId: 'dispatch_timeout2',
-      status: 'pending',
-    });
-    client.getDispatchStatus.mockResolvedValue({
-      id: 'dispatch_timeout2',
-      status: 'running',
-      type: 'skill',
-      createdAt: '2026-01-01',
-      updatedAt: '2026-01-01',
-      result: null,
-    });
-    // Cancel itself fails
-    client.cancelDispatch.mockRejectedValueOnce(new Error('Network error'));
-
-    const skillObj = makeSkillObject();
-    skillObj.dispatch.executionPolicy.timeoutMinutes = 0;
-
-    const deps: DispatchDeps = {
-      skillObjectLookup: makeLookup(skillObj),
-      karviClient: client,
-      db,
-      readSkillContent: () => '# SKILL.md',
-    };
-
-    const result = await dispatchToKarvi(makeContext(), deps);
-    expect(result.type).toBe('dispatched');
-    if (result.type === 'dispatched') {
-      expect(result.result.status).toBe('failure');
-      expect(result.result.verification.failedChecks).toContain('timeout');
-    }
-  });
-});
-
 // ─── resubmitWithApproval ───
 
 describe('resubmitWithApproval', () => {
@@ -859,28 +692,6 @@ describe('resubmitWithApproval', () => {
       dispatchId: 'dispatch_003',
       status: 'pending',
     });
-    client.getDispatchStatus.mockResolvedValueOnce({
-      id: 'dispatch_003',
-      status: 'completed',
-      type: 'skill',
-      createdAt: '2026-01-01',
-      updatedAt: '2026-01-01',
-      result: {
-        skillId: 'skill.deploy-service',
-        status: 'success',
-        durationMs: 4000,
-        steps: [],
-        outputs: {},
-        verification: { smokeChecksPassed: true, failedChecks: [] },
-        telemetry: { tokensUsed: 800, costUsd: 0.03, runtime: 'claude', model: 'claude-sonnet-4-5-20250514', stepsExecuted: 1 },
-      },
-    });
-
-    // Insert skill instance for telemetry
-    db.prepare(
-      `INSERT INTO skill_instances (id, skill_id, name, status, run_count, success_count)
-       VALUES (?, ?, ?, ?, 0, 0)`,
-    ).run('skill.deploy-service', 'skill.deploy-service', 'deploy-service', 'promoted');
 
     const deps: DispatchDeps = {
       skillObjectLookup: makeLookup(makeSkillObject()),
@@ -897,10 +708,17 @@ describe('resubmitWithApproval', () => {
 
     const result = await resubmitWithApproval(makeContext(), token, deps);
     expect(result.type).toBe('dispatched');
+    if (result.type === 'dispatched') {
+      expect(result.dispatchId).toBe('dispatch_003');
+      expect(result.status).toBe('pending');
+    }
 
     // Verify the approval token was included
     const sentRequest = client.dispatchSkill.mock.calls[0][0];
     expect(sentRequest.approvalToken).toEqual(token);
+
+    // Verify getDispatchStatus was NOT called (no polling)
+    expect(client.getDispatchStatus).not.toHaveBeenCalled();
   });
 
   it('returns fallback_local when skill not found', async () => {
