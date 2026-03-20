@@ -1,0 +1,36 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "custom-ai-t8star-cn": {
+      "name": "T8Star AI",
+      "npm": "@ai-sdk/openai-compatible",
+      "env": ["T8STAR_API_KEY"],
+      "models": {
+        "gpt-5.3-codex-medium": {
+          "name": "GPT 5.3 Codex Medium",
+          "tool_call": true,
+          "limit": { "context": 200000, "output": 163840 }
+        }
+      },
+      "options": {
+        "baseURL": "https://ai.t8star.cn/v1"
+      }
+    },
+    "ollama-local": {
+      "name": "Ollama Local",
+      "npm": "@ai-sdk/openai-compatible",
+      "env": [],
+      "models": {
+        "qwen3.5:35b-32k": {
+          "name": "Qwen 3.5 35B 32K",
+          "tool_call": true,
+          "limit": { "context": 32768, "output": 8192 }
+        }
+      },
+      "options": {
+        "baseURL": "http://localhost:11434/v1",
+        "apiKey": "ollama"
+      }
+    }
+  }
+}
