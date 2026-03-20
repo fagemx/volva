@@ -78,5 +78,24 @@ export function dispatchRoutes(deps: DispatchRouteDeps): Hono {
     return ok(c, result);
   });
 
+  // ─── GET /api/dispatches/:id/status ───
+  // Get dispatch status from Karvi (0 LLM calls)
+  app.get('/api/dispatches/:id/status', async (c) => {
+    const id = c.req.param('id');
+    try {
+      const status = await deps.karvi.getDispatchStatus(id);
+      return ok(c, status);
+    } catch (err) {
+      if (err instanceof KarviApiError) {
+        const statusMap: Record<string, number> = { NOT_FOUND: 404 };
+        return error(c, err.code, err.message, (statusMap[err.code] ?? 400) as 400 | 404);
+      }
+      if (err instanceof KarviNetworkError) {
+        return error(c, 'KARVI_UNAVAILABLE', `Karvi unreachable: ${err.message}`, 503);
+      }
+      throw err;
+    }
+  });
+
   return app;
 }

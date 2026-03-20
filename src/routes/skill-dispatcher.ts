@@ -3,11 +3,10 @@ import { join, dirname } from 'path';
 import type { Database } from 'bun:sqlite';
 import type { SkillObject } from '../schemas/skill-object';
 import type { SkillObjectLookup } from '../skills/types';
-import type { SkillDispatchRequest, SkillDispatchResult } from '../karvi-client/schemas';
+import type { SkillDispatchRequest } from '../karvi-client/schemas';
 import { KarviClient } from '../karvi-client/client';
 import { KarviNetworkError, KarviApiError } from '../karvi-client/schemas';
 import { mergeSkillObject } from '../skills/overlay-merge';
-import { recordRun } from '../skills/telemetry';
 
 // ─── Types ───
 
@@ -20,7 +19,7 @@ export interface SkillDispatchContext {
 }
 
 export type SkillDispatchOutcome =
-  | { type: 'dispatched'; result: SkillDispatchResult }
+  | { type: 'dispatched'; dispatchId: string; status: string }
   | { type: 'approval_required'; pendingId: string; skillName: string; permissions: SkillObject['environment']['permissions']; sideEffects: boolean; executionMode: string }
   | { type: 'fallback_local'; reason: string }
   | { type: 'queued'; queueId: string; reason: string }
@@ -154,23 +153,8 @@ export async function dispatchToKarvi(
   try {
     const dispatchResponse = await deps.karviClient.dispatchSkill(request);
 
-    // 8. Poll for completion
-    const result = await pollForCompletion(
-      dispatchResponse.dispatchId,
-      deps.karviClient,
-      merged.dispatch.executionPolicy.timeoutMinutes,
-    );
-
-    // 9. Record telemetry
-    recordRun(deps.db, {
-      skillInstanceId: ctx.skillId,
-      conversationId: ctx.conversationId,
-      outcome: mapResultStatus(result.status),
-      durationMs: result.durationMs,
-      notes: `Karvi dispatch: ${dispatchResponse.dispatchId}`,
-    });
-
-    return { type: 'dispatched', result };
+    // Return immediately - client will poll for completion via GET /api/dispatches/:id/status
+    return { type: 'dispatched', dispatchId: dispatchResponse.dispatchId, status: dispatchResponse.status };
   } catch (error) {
     // Handle APPROVAL_REQUIRED
     if (error instanceof KarviApiError && error.code === 'APPROVAL_REQUIRED') {
@@ -255,21 +239,8 @@ export async function resubmitWithApproval(
   try {
     const dispatchResponse = await deps.karviClient.dispatchSkill(request);
 
-    const result = await pollForCompletion(
-      dispatchResponse.dispatchId,
-      deps.karviClient,
-      merged.dispatch.executionPolicy.timeoutMinutes,
-    );
-
-    recordRun(deps.db, {
-      skillInstanceId: ctx.skillId,
-      conversationId: ctx.conversationId,
-      outcome: mapResultStatus(result.status),
-      durationMs: result.durationMs,
-      notes: `Karvi dispatch (approved): ${dispatchResponse.dispatchId}`,
-    });
-
-    return { type: 'dispatched', result };
+    // Return immediately - client will poll for completion via GET /api/dispatches/:id/status
+    return { type: 'dispatched', dispatchId: dispatchResponse.dispatchId, status: dispatchResponse.status };
   } catch (error) {
     if (error instanceof KarviNetworkError) {
       const fallbackStrategy = merged.dispatch.fallback;
@@ -367,68 +338,4 @@ export async function processDispatchQueue(
   }
 
   return { processed: pending.length, succeeded, failed };
-}
-
-// ─── Internal Helpers ───
-
-const POLL_INTERVAL_MS = 2000;
-const MAX_POLL_ATTEMPTS = (timeoutMinutes: number) => Math.ceil((timeoutMinutes * 60 * 1000) / POLL_INTERVAL_MS);
-
-async function pollForCompletion(
-  dispatchId: string,
-  client: KarviClient,
-  timeoutMinutes: number,
-): Promise<SkillDispatchResult> {
-  const maxAttempts = MAX_POLL_ATTEMPTS(timeoutMinutes);
-
-  for (let i = 0; i < maxAttempts; i++) {
-    const status = await client.getDispatchStatus(dispatchId);
-
-    if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
-      if (status.result && 'outputs' in status.result) {
-        return status.result;
-      }
-      // Terminal state but no result — construct minimal result
-      return {
-        skillId: '',
-        status: status.status === 'completed' ? 'success' : 'failure',
-        durationMs: 0,
-        steps: [],
-        outputs: {},
-        verification: { smokeChecksPassed: false, failedChecks: [] },
-        telemetry: { tokensUsed: 0, costUsd: 0, runtime: 'unknown', model: 'unknown', stepsExecuted: 0 },
-      };
-    }
-
-    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
-  }
-
-  // Timeout — best-effort cancel on Karvi side
-  try {
-    await client.cancelDispatch(dispatchId);
-  } catch {
-    // Karvi may already be done or unreachable — non-fatal
-  }
-
-  return {
-    skillId: '',
-    status: 'failure',
-    durationMs: timeoutMinutes * 60 * 1000,
-    steps: [],
-    outputs: {},
-    verification: { smokeChecksPassed: false, failedChecks: ['timeout'] },
-    telemetry: { tokensUsed: 0, costUsd: 0, runtime: 'unknown', model: 'unknown', stepsExecuted: 0 },
-  };
-}
-
-function mapResultStatus(status: SkillDispatchResult['status']): 'success' | 'failure' | 'partial' {
-  switch (status) {
-    case 'success':
-      return 'success';
-    case 'partial':
-      return 'partial';
-    case 'failure':
-    case 'cancelled':
-      return 'failure';
-  }
 }

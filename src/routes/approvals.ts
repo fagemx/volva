@@ -172,9 +172,9 @@ export function approvalRoutes(deps: ApprovalDeps): Hono {
     );
 
     if (outcome.type === 'dispatched') {
-      return ok(c, { type: 'dispatched' as const, result: outcome.result });
+      return ok(c, { type: 'dispatched' as const, dispatchId: outcome.dispatchId, status: outcome.status });
     }
-
+    
     // fallback_local on resubmit
     return ok(c, { type: 'fallback_local' as const, reason: outcome.type === 'fallback_local' ? outcome.reason : 'Unexpected outcome' });
   });
