@@ -716,8 +716,11 @@ describe('Zod Schemas — conversation.ts', () => {
     expect(result.success).toBe(true);
   });
 
-  it('CreateConversationInput rejects missing mode', () => {
+  it('CreateConversationInput defaults mode to world_design when missing', () => {
     const result = CreateConversationInput.safeParse({});
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.mode).toBe('world_design');
+    }
   });
 });
