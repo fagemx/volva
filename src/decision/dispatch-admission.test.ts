@@ -327,4 +327,22 @@ describe('dispatch-admission', () => {
       expect(payload.reason).toContain('Only promoted skills');
     });
   });
+
+  describe('schema indexes', () => {
+    it('creates indexes on skill_runs.created_at and forge_builds.created_at', () => {
+      const indexes = db
+        .query(
+          `SELECT name, tbl_name FROM sqlite_master
+           WHERE type = 'index' AND name IN ('idx_skill_runs_created', 'idx_forge_builds_created')
+           ORDER BY name`,
+        )
+        .all() as Record<string, unknown>[];
+
+      expect(indexes).toHaveLength(2);
+      expect(indexes[0].name).toBe('idx_forge_builds_created');
+      expect(indexes[0].tbl_name).toBe('forge_builds');
+      expect(indexes[1].name).toBe('idx_skill_runs_created');
+      expect(indexes[1].tbl_name).toBe('skill_runs');
+    });
+  });
 });

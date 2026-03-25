@@ -279,4 +279,6 @@ export function initSchema(db: Database): void {
   db.run('CREATE INDEX IF NOT EXISTS idx_candidate_records_session ON candidate_records(session_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_approval_audits_pending ON approval_audits(pending_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_dispatch_queue_status ON dispatch_queue(status, next_retry_at)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_skill_runs_created ON skill_runs(created_at)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_forge_builds_created ON forge_builds(created_at)');
 }
