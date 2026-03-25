@@ -193,7 +193,7 @@ describe('approvalRoutes', () => {
         inputs: {},
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(202);
       const json = await res.json() as Record<string, unknown>;
       expect(json.ok).toBe(true);
       const data = json.data as Record<string, unknown>;
@@ -321,7 +321,7 @@ describe('approvalRoutes', () => {
         approvedBy: 'alice',
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(202);
       const json = await res.json() as Record<string, unknown>;
       expect(json.ok).toBe(true);
       const data = json.data as Record<string, unknown>;
