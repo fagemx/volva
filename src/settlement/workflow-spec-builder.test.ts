@@ -97,4 +97,75 @@ describe('buildWorkflowSpec', () => {
     expect(result.exit_conditions).toEqual([]);
     expect(result.failure_handling).toEqual([]);
   });
+
+  it('handles YAML-sensitive characters in step descriptions', () => {
+    const card: WorkflowCard = {
+      ...baseCard,
+      steps: [
+        { order: 0, description: 'check: "status" #important', skill: null, conditions: 'if: ready' },
+      ],
+    };
+    const result = yaml.load(buildWorkflowSpec(card)) as Record<string, unknown>;
+    const steps = result.steps as Array<Record<string, unknown>>;
+    expect(steps[0].description).toBe('check: "status" #important');
+    expect(steps[0].conditions).toBe('if: ready');
+  });
+
+  it('handles single step', () => {
+    const card: WorkflowCard = {
+      ...baseCard,
+      steps: [
+        { order: 0, description: 'only step', skill: 'solo', conditions: null },
+      ],
+    };
+    const result = yaml.load(buildWorkflowSpec(card)) as Record<string, unknown>;
+    const steps = result.steps as Array<Record<string, unknown>>;
+    expect(steps).toHaveLength(1);
+    expect(steps[0].description).toBe('only step');
+  });
+
+  it('handles non-sequential step order values', () => {
+    const card: WorkflowCard = {
+      ...baseCard,
+      steps: [
+        { order: 0, description: 'first', skill: null, conditions: null },
+        { order: 5, description: 'middle', skill: null, conditions: null },
+        { order: 10, description: 'last', skill: null, conditions: null },
+      ],
+    };
+    const result = yaml.load(buildWorkflowSpec(card)) as Record<string, unknown>;
+    const steps = result.steps as Array<Record<string, unknown>>;
+    expect(steps).toHaveLength(3);
+    expect(steps[0].order).toBe(0);
+    expect(steps[1].order).toBe(5);
+    expect(steps[2].order).toBe(10);
+  });
+
+  it('handles step with all nullable fields null', () => {
+    const card: WorkflowCard = {
+      ...baseCard,
+      steps: [
+        { order: 0, description: 'basic step', skill: null, conditions: null },
+      ],
+    };
+    const result = yaml.load(buildWorkflowSpec(card)) as Record<string, unknown>;
+    const steps = result.steps as Array<Record<string, unknown>>;
+    expect(steps[0].skill).toBeNull();
+    expect(steps[0].conditions).toBeNull();
+  });
+
+  it('handles triggers with special characters', () => {
+    const card: WorkflowCard = {
+      ...baseCard,
+      confirmed: {
+        triggers: ['cron: "0 * * * *"', 'webhook: /api/trigger#deploy'],
+        exit_conditions: ['status: healthy'],
+        failure_handling: ['alert: "ops team"'],
+      },
+    };
+    const result = yaml.load(buildWorkflowSpec(card)) as Record<string, unknown>;
+    expect(result.triggers).toEqual(['cron: "0 * * * *"', 'webhook: /api/trigger#deploy']);
+    expect(result.exit_conditions).toEqual(['status: healthy']);
+    expect(result.failure_handling).toEqual(['alert: "ops team"']);
+  });
 });
