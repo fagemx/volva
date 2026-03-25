@@ -308,6 +308,66 @@ describe('mergeSkillObject', () => {
     expect(result.environment.executionMode).toBe('assistive');
   });
 
+  // --- Deep merge: partial dispatch.executionPolicy preserves base fields ---
+  it('deep-merges partial dispatch.executionPolicy without clobbering base fields', () => {
+    const base = makeBaseSkillObject();
+    const dispatchOverlay = {
+      dispatch: {
+        executionPolicy: { retries: 3 },
+      },
+    };
+
+    const result = mergeSkillObject(base, dispatchOverlay);
+
+    expect(result.dispatch.executionPolicy.retries).toBe(3);
+    // Base fields preserved
+    expect(result.dispatch.executionPolicy.sync).toBe(true);
+    expect(result.dispatch.executionPolicy.timeoutMinutes).toBe(10);
+    expect(result.dispatch.executionPolicy.escalationOnFailure).toBe(false);
+  });
+
+  // --- Deep merge: partial dispatch.approval preserves base fields ---
+  it('deep-merges partial dispatch.approval without clobbering base fields', () => {
+    const base = makeBaseSkillObject();
+    const dispatchOverlay = {
+      dispatch: {
+        approval: { requireHumanBeforeDispatch: true },
+      },
+    };
+
+    const result = mergeSkillObject(base, dispatchOverlay);
+
+    expect(result.dispatch.approval.requireHumanBeforeDispatch).toBe(true);
+    // Base field preserved
+    expect(result.dispatch.approval.requireHumanBeforeMerge).toBe(false);
+  });
+
+  // --- Deep merge: partial environment.permissions preserves base fields ---
+  it('deep-merges partial environment.permissions without clobbering base fields', () => {
+    const base = makeBaseSkillObject();
+    const runtimeOverlay = {
+      environment: {
+        permissions: {
+          filesystem: { read: true, write: true },
+        },
+      },
+    };
+
+    const result = mergeSkillObject(base, undefined, runtimeOverlay);
+
+    expect(result.environment.permissions.filesystem).toEqual({
+      read: true,
+      write: true,
+    });
+    // Other permissions preserved from base
+    expect(result.environment.permissions.network).toEqual({
+      read: false,
+      write: false,
+    });
+    expect(result.environment.permissions.process).toEqual({ spawn: false });
+    expect(result.environment.permissions.secrets).toEqual({ read: [] });
+  });
+
   // --- No overlay: returns base unchanged ---
   it('returns base unchanged when no overlays provided', () => {
     const base = makeBaseSkillObject();

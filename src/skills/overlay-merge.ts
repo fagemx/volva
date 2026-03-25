@@ -80,6 +80,40 @@ function validateOverlayScope(
   }
 }
 
+// ─── Deep Merge Helper ───
+
+/**
+ * Merge overlay into base one level deep: for each key in overlay,
+ * if both base[key] and overlay[key] are plain objects, spread-merge them;
+ * otherwise overlay[key] wins (replaces arrays, scalars, etc.).
+ */
+function mergeOneLevel<T extends Record<string, unknown>>(
+  base: T,
+  overlay: Record<string, unknown>,
+): T {
+  const result = { ...base };
+  for (const key of Object.keys(overlay)) {
+    const baseVal = (base as Record<string, unknown>)[key];
+    const overVal = overlay[key];
+    if (
+      baseVal !== null &&
+      typeof baseVal === 'object' &&
+      !Array.isArray(baseVal) &&
+      overVal !== null &&
+      typeof overVal === 'object' &&
+      !Array.isArray(overVal)
+    ) {
+      (result as Record<string, unknown>)[key] = {
+        ...(baseVal as Record<string, unknown>),
+        ...(overVal as Record<string, unknown>),
+      };
+    } else {
+      (result as Record<string, unknown>)[key] = overVal;
+    }
+  }
+  return result;
+}
+
 // ─── Merge ───
 
 /**
@@ -105,10 +139,10 @@ export function mergeSkillObject(
       'dispatch',
     );
     if (dispatchOverlay.dispatch) {
-      merged.dispatch = {
-        ...merged.dispatch,
-        ...(dispatchOverlay.dispatch as typeof merged.dispatch),
-      };
+      merged.dispatch = mergeOneLevel(
+        merged.dispatch,
+        dispatchOverlay.dispatch as Record<string, unknown>,
+      );
     }
   }
 
@@ -119,16 +153,16 @@ export function mergeSkillObject(
       'runtime',
     );
     if (runtimeOverlay.environment) {
-      merged.environment = {
-        ...merged.environment,
-        ...(runtimeOverlay.environment as typeof merged.environment),
-      };
+      merged.environment = mergeOneLevel(
+        merged.environment,
+        runtimeOverlay.environment as Record<string, unknown>,
+      );
     }
     if (runtimeOverlay.verification) {
-      merged.verification = {
-        ...merged.verification,
-        ...(runtimeOverlay.verification as typeof merged.verification),
-      };
+      merged.verification = mergeOneLevel(
+        merged.verification,
+        runtimeOverlay.verification as Record<string, unknown>,
+      );
     }
     if (
       runtimeOverlay.governance &&
