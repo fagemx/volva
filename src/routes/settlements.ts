@@ -13,7 +13,33 @@ import { buildCommerceSpec } from '../settlement/commerce-spec-builder';
 import { buildOrgHierarchy } from '../settlement/org-hierarchy-builder';
 import { buildPipelineSpec } from '../settlement/pipeline-spec-builder';
 import { buildAdapterConfig } from '../settlement/adapter-config-builder';
-import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AdapterCard, CommerceCard, OrgCard } from '../schemas/card';
+import type { AnyCard, WorldCard, WorkflowCard, TaskCard, PipelineCard, AdapterCard, CommerceCard, OrgCard } from '../schemas/card';
+import type { SettlementTarget } from '../schemas/settlement';
+
+const builderMap: Record<SettlementTarget, (content: AnyCard) => string> = {
+  village_pack: (c) => buildVillagePack(c as WorldCard),
+  workflow: (c) => buildWorkflowSpec(c as WorkflowCard),
+  market_init: (c) => buildCommerceSpec(c as CommerceCard),
+  org_hierarchy: (c) => buildOrgHierarchy(c as OrgCard),
+  pipeline: (c) => buildPipelineSpec(c as PipelineCard),
+  adapter_config: (c) => buildAdapterConfig(c as AdapterCard),
+  task: (c) => buildTaskSpec(c as TaskCard),
+};
+
+function persistDraft(
+  db: Database,
+  conversationId: string,
+  cardId: string,
+  target: SettlementTarget,
+  payload: string,
+): { id: string; target: SettlementTarget; payload: string; status: 'draft' } {
+  const id = crypto.randomUUID();
+  db.run(
+    'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
+    [id, conversationId, cardId, target, payload, 'draft'],
+  );
+  return { id, target, payload, status: 'draft' };
+}
 
 export interface SettlementDeps {
   db: Database;
@@ -56,74 +82,9 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
       return ok(c, { target: null, status: 'no_settlement_target' });
     }
 
-    if (target === 'village_pack') {
-      const yaml = buildVillagePack(card.content as WorldCard);
-      const settlementId = crypto.randomUUID();
-      deps.db.run(
-        'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
-        [settlementId, conversationId, card.id, target, yaml, 'draft'],
-      );
-      return ok(c, { id: settlementId, target, payload: yaml, status: 'draft' });
-    }
-
-    if (target === 'workflow') {
-      const yaml = buildWorkflowSpec(card.content as WorkflowCard);
-      const settlementId = crypto.randomUUID();
-      deps.db.run(
-        'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
-        [settlementId, conversationId, card.id, target, yaml, 'draft'],
-      );
-      return ok(c, { id: settlementId, target, payload: yaml, status: 'draft' });
-    }
-
-    if (target === 'market_init') {
-      const json = buildCommerceSpec(card.content as CommerceCard);
-      const settlementId = crypto.randomUUID();
-      deps.db.run(
-        'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
-        [settlementId, conversationId, card.id, target, json, 'draft'],
-      );
-      return ok(c, { id: settlementId, target, payload: json, status: 'draft' });
-    }
-
-    if (target === 'org_hierarchy') {
-      const yamlStr = buildOrgHierarchy(card.content as OrgCard);
-      const settlementId = crypto.randomUUID();
-      deps.db.run(
-        'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
-        [settlementId, conversationId, card.id, target, yamlStr, 'draft'],
-      );
-      return ok(c, { id: settlementId, target, payload: yamlStr, status: 'draft' });
-    }
-
-    if (target === 'pipeline') {
-      const yamlStr = buildPipelineSpec(card.content as PipelineCard);
-      const settlementId = crypto.randomUUID();
-      deps.db.run(
-        'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
-        [settlementId, conversationId, card.id, target, yamlStr, 'draft'],
-      );
-      return ok(c, { id: settlementId, target, payload: yamlStr, status: 'draft' });
-    }
-
-    if (target === 'adapter_config') {
-      const json = buildAdapterConfig(card.content as AdapterCard);
-      const settlementId = crypto.randomUUID();
-      deps.db.run(
-        'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
-        [settlementId, conversationId, card.id, target, json, 'draft'],
-      );
-      return ok(c, { id: settlementId, target, payload: json, status: 'draft' });
-    }
-
-    // target === 'task'
-    const json = buildTaskSpec(card.content as TaskCard);
-    const settlementId = crypto.randomUUID();
-    deps.db.run(
-      'INSERT INTO settlements (id, conversation_id, card_id, target, payload, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [settlementId, conversationId, card.id, target, json, 'draft'],
-    );
-    return ok(c, { id: settlementId, target, payload: json, status: 'draft' });
+    const build = builderMap[target];
+    const payload = build(card.content);
+    return ok(c, persistDraft(deps.db, conversationId, card.id, target, payload));
   });
 
   // POST /api/conversations/:id/settle/confirm — confirms a draft settlement
