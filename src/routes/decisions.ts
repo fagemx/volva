@@ -20,13 +20,14 @@ import {
   type ForgeBuildDispatchData,
 } from '../karvi-client/schemas';
 import { consumeForgeResult } from '../skills/telemetry-consumer';
-import type {
-  IntentRoute,
-  PathCheckResult,
-  RealizationCandidate,
-  CommitMemo,
-  SignalPacket,
-  Regime,
+import {
+  RegimeEnum,
+  type IntentRoute,
+  type PathCheckResult,
+  type RealizationCandidate,
+  type CommitMemo,
+  type SignalPacket,
+  type Regime,
 } from '../schemas/decision';
 
 // ─── DI Interface ───
@@ -67,14 +68,27 @@ const SpaceBuildInput = z.object({
   maxSearchFriction: z.enum(['low', 'medium', 'high']).optional(),
 });
 
+// Typed input schema for signal packets — context-derivable fields have defaults
+const SignalPacketInputSchema = z.object({
+  candidateId: z.string().default(''),
+  probeId: z.string().default(''),
+  regime: RegimeEnum.default('economic'),
+  signalType: z.string().default('user_provided'),
+  strength: z.enum(['weak', 'moderate', 'strong']).default('moderate'),
+  evidence: z.array(z.string()).default([]),
+  negativeEvidence: z.array(z.string()).optional(),
+  interpretation: z.string().default(''),
+  nextQuestions: z.array(z.string()).default([]),
+});
+
 const EvaluateInput = z.object({
   candidateId: z.string().min(1),
-  signals: z.array(z.unknown()).optional(),
+  signals: z.array(SignalPacketInputSchema).optional(),
 });
 
 const RetryEvaluateInput = z.object({
   candidateId: z.string().min(1),
-  additionalSignals: z.array(z.unknown()).optional(),
+  additionalSignals: z.array(SignalPacketInputSchema).optional(),
 });
 
 const ForgeInput = z.object({
@@ -87,10 +101,6 @@ const DecisionStatusFilter = z.enum(['active', 'paused', 'promoted', 'archived']
 
 // ─── Helpers ───
 
-function filterStrings(arr: unknown[]): string[] {
-  return arr.filter((e): e is string => typeof e === 'string');
-}
-
 function buildIntentRouteFromSession(session: DecisionSession): IntentRoute {
   return {
     primaryRegime: session.primaryRegime ?? 'economic',
@@ -101,40 +111,6 @@ function buildIntentRouteFromSession(session: DecisionSession): IntentRoute {
     keyUnknowns: session.keyUnknowns,
     suggestedFollowups: [],
   };
-}
-
-function parseSignalPacket(
-  raw: Record<string, unknown>,
-  defaultCandidateId: string,
-  defaultRegime: Regime,
-): SignalPacket {
-  return {
-    candidateId: typeof raw.candidateId === 'string' ? raw.candidateId : defaultCandidateId,
-    probeId: typeof raw.probeId === 'string' ? raw.probeId : '',
-    regime: (typeof raw.regime === 'string' ? raw.regime : defaultRegime) as Regime,
-    signalType: typeof raw.signalType === 'string' ? raw.signalType : 'user_provided',
-    strength: (typeof raw.strength === 'string' ? raw.strength : 'moderate') as SignalPacket['strength'],
-    evidence: Array.isArray(raw.evidence) ? filterStrings(raw.evidence as unknown[]) : [],
-    negativeEvidence: Array.isArray(raw.negativeEvidence)
-      ? filterStrings(raw.negativeEvidence as unknown[])
-      : undefined,
-    interpretation: typeof raw.interpretation === 'string' ? raw.interpretation : '',
-    nextQuestions: Array.isArray(raw.nextQuestions) ? filterStrings(raw.nextQuestions as unknown[]) : [],
-  };
-}
-
-function parseSignals(
-  rawSignals: unknown[],
-  defaultCandidateId: string,
-  defaultRegime: Regime,
-): SignalPacket[] {
-  const signals: SignalPacket[] = [];
-  for (const raw of rawSignals) {
-    if (typeof raw === 'object' && raw !== null) {
-      signals.push(parseSignalPacket(raw as Record<string, unknown>, defaultCandidateId, defaultRegime));
-    }
-  }
-  return signals;
 }
 
 function candidateToRealization(candidate: CandidateRow): RealizationCandidate {
@@ -480,8 +456,10 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
     }
 
     const probeableForm = packageProbe(realizationCandidate);
-    const rawSignals = parsed.data.signals ?? [];
-    const signals = parseSignals(rawSignals, candidateId, session.primaryRegime ?? 'economic');
+    const signals: SignalPacket[] = (parsed.data.signals ?? []).map((s) => ({
+      ...s,
+      candidateId: s.candidateId || candidateId,
+    }));
 
     const commitMemo = buildCommitMemoFromSignals(
       candidateId,
@@ -514,8 +492,10 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
     }
 
     const { candidateId } = parsed.data;
-    const rawSignals = parsed.data.additionalSignals ?? [];
-    const additionalSignals = parseSignals(rawSignals, candidateId, session.primaryRegime ?? 'economic');
+    const additionalSignals: SignalPacket[] = (parsed.data.additionalSignals ?? []).map((s) => ({
+      ...s,
+      candidateId: s.candidateId || candidateId,
+    }));
 
     // Reset to space-building, then re-advance
     deps.sessionManager.resetToStage(session.id, 'space-building');
