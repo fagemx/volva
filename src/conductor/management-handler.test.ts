@@ -101,34 +101,6 @@ describe('handleManagementTurn', () => {
     expect(mockGenerateReply).toHaveBeenCalledTimes(1);
   });
 
-  it('returns fallback when parseIntent throws (LLM-02)', async () => {
-    setupThyraMocks();
-    mockParseIntent.mockRejectedValueOnce(new Error('LLM network error'));
-    mockGenerateReply.mockResolvedValueOnce('抱歉，請再說一次');
-
-    const result = await handleManagementTurn(mockLlm, mockThyra, 'v1', '你好');
-
-    expect(result.intent.type).toBe('off_topic');
-    expect(result.intent.summary).toBe('你好');
-    expect(result.reply).toBe('抱歉，請再說一次');
-    expect(result.action).toBe('none');
-  });
-
-  it('returns fallback reply when generateReply throws (LLM-02)', async () => {
-    setupThyraMocks();
-    mockParseIntent.mockResolvedValueOnce({
-      ok: true,
-      data: { type: 'query_status', summary: '狀態' },
-    });
-    mockGenerateReply.mockRejectedValueOnce(new Error('LLM timeout'));
-
-    const result = await handleManagementTurn(mockLlm, mockThyra, 'v1', '目前狀態');
-
-    expect(result.intent.type).toBe('query_status');
-    expect(result.reply).toContain('System error');
-    expect(result.action).toBe('query');
-  });
-
   it('handles Thyra failure gracefully', async () => {
     (mockThyra.getVillage as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Connection refused'));
     (mockThyra.getActiveConstitution as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Connection refused'));

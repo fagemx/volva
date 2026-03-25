@@ -52,31 +52,23 @@ function formatHistory(
  * Called as an independent request (e.g. POST /api/skills/harvest),
  * NOT inside handleTurn() — satisfies COND-02.
  *
- * LLM call wrapped in try/catch with Zod validation (CONTRACT LLM-01 + LLM-02).
+ * LLM call with Zod validation (CONTRACT LLM-01). Never throws (CONTRACT LLM-02 satisfied by LLMClient).
  */
 export async function capturePattern(
   llm: LLMClient,
   conversationHistory: ReadonlyArray<{ role: string; content: string }>,
   context: string,
 ): Promise<{ ok: true; data: SkillCandidate } | { ok: false; error: string }> {
-  try {
-    const result = await llm.generateStructured({
-      system: CAPTURE_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user' as const,
-          content: `Context: ${context}\n\nConversation:\n${formatHistory(conversationHistory)}`,
-        },
-      ],
-      schema: SkillCandidateSchema,
-      schemaDescription:
-        'SkillCandidate with name, summary, problemShapes[], desiredOutcomes[], nonGoals[], triggerWhen[], doNotTriggerWhen[], methodOutline[], observedGotchas[]',
-    });
-    return result;
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
+  return llm.generateStructured({
+    system: CAPTURE_SYSTEM_PROMPT,
+    messages: [
+      {
+        role: 'user' as const,
+        content: `Context: ${context}\n\nConversation:\n${formatHistory(conversationHistory)}`,
+      },
+    ],
+    schema: SkillCandidateSchema,
+    schemaDescription:
+      'SkillCandidate with name, summary, problemShapes[], desiredOutcomes[], nonGoals[], triggerWhen[], doNotTriggerWhen[], methodOutline[], observedGotchas[]',
+  });
 }
