@@ -744,6 +744,135 @@ describe('Decision Routes E2E', () => {
   });
 
   // ═══════════════════════════════════════════
+  // GP-7: Hold Verdict Blocks Forge
+  // ═══════════════════════════════════════════
+  describe('GP-7: Hold verdict blocks forge handoff', () => {
+    it('hold verdict from evaluate blocks forge, session stays at commit-review', async () => {
+      // Setup: start -> path-check -> space-build
+      llm.generateStructured.mockResolvedValueOnce({ ok: true, data: economicIntentRoute });
+      const startRes = await jsonPost(app, '/api/decisions/start', {
+        userMessage: 'I want to make money',
+      });
+      const startBody = await startRes.json() as { ok: boolean; data: { sessionId: string } };
+      const sessionId = startBody.data.sessionId;
+
+      await jsonPost(app, `/api/decisions/${sessionId}/path-check`, {});
+
+      llm.generateStructured.mockResolvedValueOnce({ ok: true, data: makeEconomicCandidates() });
+      await jsonPost(app, `/api/decisions/${sessionId}/space-build`, { userMessage: 'video gen' });
+
+      const candidates = sessionManager.getCandidates(sessionId);
+      const candidateId = candidates[0].id;
+
+      // Evaluate with only moderate signals -> hold verdict
+      const evalRes = await jsonPost(app, `/api/decisions/${sessionId}/evaluate`, {
+        candidateId,
+        signals: [
+          {
+            signalType: 'buyer_interest',
+            strength: 'moderate',
+            evidence: ['1 studio showed interest'],
+            interpretation: 'Moderate interest only',
+            nextQuestions: ['Need stronger signal'],
+          },
+        ],
+      });
+      expect(evalRes.status).toBe(200);
+      const evalBody = await evalRes.json() as {
+        ok: boolean;
+        data: { commitMemo: { verdict: string }; stage: string };
+      };
+      expect(evalBody.data.commitMemo.verdict).toBe('hold');
+      expect(evalBody.data.stage).toBe('commit-review');
+
+      // Attempt forge -> should fail (no commit memo with verdict=commit)
+      const forgeRes = await jsonPost(app, `/api/decisions/${sessionId}/forge`, {
+        confirmation: true,
+      });
+      expect(forgeRes.status).toBe(404);
+      const forgeBody = await forgeRes.json() as {
+        ok: boolean;
+        error: { code: string };
+      };
+      expect(forgeBody.ok).toBe(false);
+      expect(forgeBody.error.code).toBe('NOT_FOUND');
+
+      // Verify session stays at commit-review, not promoted
+      const session = sessionManager.getSession(sessionId);
+      expect(session).not.toBeNull();
+      expect(session!.stage).toBe('commit-review');
+      expect(session!.status).toBe('active');
+    });
+  });
+
+  // ═══════════════════════════════════════════
+  // GP-8: Discard Verdict Blocks Forge
+  // ═══════════════════════════════════════════
+  describe('GP-8: Discard verdict blocks forge handoff', () => {
+    it('discard verdict stored via evaluator blocks forge, session stays active', async () => {
+      // Setup: start -> path-check -> space-build -> evaluate (produces hold)
+      llm.generateStructured.mockResolvedValueOnce({ ok: true, data: economicIntentRoute });
+      const startRes = await jsonPost(app, '/api/decisions/start', {
+        userMessage: 'I want to make money',
+      });
+      const startBody = await startRes.json() as { ok: boolean; data: { sessionId: string } };
+      const sessionId = startBody.data.sessionId;
+
+      await jsonPost(app, `/api/decisions/${sessionId}/path-check`, {});
+
+      llm.generateStructured.mockResolvedValueOnce({ ok: true, data: makeEconomicCandidates() });
+      await jsonPost(app, `/api/decisions/${sessionId}/space-build`, { userMessage: 'video gen' });
+
+      const candidates = sessionManager.getCandidates(sessionId);
+      const candidateId = candidates[0].id;
+
+      // Evaluate (produces hold with weak signals)
+      await jsonPost(app, `/api/decisions/${sessionId}/evaluate`, {
+        candidateId,
+        signals: [
+          {
+            signalType: 'buyer_interest',
+            strength: 'weak',
+            evidence: ['vague interest only'],
+            interpretation: 'No real signal',
+            nextQuestions: [],
+          },
+        ],
+      });
+
+      // Simulate discard verdict from a real evaluator by storing discard memo directly
+      sessionManager.addCommitMemo(sessionId, candidateId, {
+        regime: 'economic',
+        verdict: 'discard',
+        rationale: ['Value proposition collapses under specifics', 'No edge over consensus paths'],
+        evidenceUsed: ['vague interest only'],
+        unresolvedRisks: ['No buyer shape identified'],
+        recommendedNextStep: ['Archive session and re-examine assumptions'],
+        whatForgeShouldBuild: [],
+        whatForgeMustNotBuild: [],
+      });
+
+      // Attempt forge -> should fail (discard verdict is not commit)
+      const forgeRes = await jsonPost(app, `/api/decisions/${sessionId}/forge`, {
+        confirmation: true,
+      });
+      expect(forgeRes.status).toBe(404);
+      const forgeBody = await forgeRes.json() as {
+        ok: boolean;
+        error: { code: string };
+      };
+      expect(forgeBody.ok).toBe(false);
+      expect(forgeBody.error.code).toBe('NOT_FOUND');
+
+      // Verify session stays at commit-review, status is active (not promoted)
+      const session = sessionManager.getSession(sessionId);
+      expect(session).not.toBeNull();
+      expect(session!.stage).toBe('commit-review');
+      expect(session!.status).toBe('active');
+    });
+  });
+
+  // ═══════════════════════════════════════════
   // CONTRACT Validation
   // ═══════════════════════════════════════════
   describe('CONTRACT validation', () => {
