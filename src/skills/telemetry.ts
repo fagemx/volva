@@ -34,7 +34,7 @@ export interface SkillMetrics {
 }
 
 export function recordRun(db: Database, run: RunRecord): string {
-  const id = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = `run_${crypto.randomUUID()}`;
 
   db.prepare(
     `INSERT INTO skill_runs (id, skill_instance_id, conversation_id, outcome, duration_ms, tokens_used, cost_usd, runtime, model, notes)
@@ -66,7 +66,7 @@ export function recordRun(db: Database, run: RunRecord): string {
 }
 
 export function recordForgeBuild(db: Database, record: ForgeRunRecord): string {
-  const id = `forge_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = `forge_${crypto.randomUUID()}`;
 
   const failedStepsJson = record.failedSteps && record.failedSteps.length > 0
     ? JSON.stringify(record.failedSteps)

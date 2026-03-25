@@ -138,7 +138,7 @@ export function skillRoutes(deps: SkillDeps): Hono {
     if (instanceRow) {
       instanceId = instanceRow.id as string;
     } else {
-      instanceId = `inst_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      instanceId = `inst_${crypto.randomUUID()}`;
       deps.db.run(
         'INSERT INTO skill_instances (id, skill_id, name, status, current_stage) VALUES (?, ?, ?, ?, ?)',
         [instanceId, skillId, skillObject.name, skillObject.status, skillObject.lifecycle?.currentStage ?? 'capture'],
