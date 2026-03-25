@@ -34,7 +34,7 @@ export function createMockKarviServer(): MockKarviServer {
         const body = await req.json() as SkillDispatchRequest;
         state.receivedRequests.push(body);
 
-        const dispatchId = `disp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const dispatchId = `disp_${crypto.randomUUID()}`;
         const now = new Date().toISOString();
 
         state.dispatches.set(dispatchId, {

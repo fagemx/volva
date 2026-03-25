@@ -40,7 +40,7 @@ export function dispatchRoutes(deps: DispatchRouteDeps): Hono {
       // Record cancellation event if session context is provided
       if (sessionId) {
         try {
-          const eventId = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          const eventId = `evt_${crypto.randomUUID()}`;
           deps.db.prepare(
             `INSERT INTO decision_events (id, session_id, event_type, object_type, object_id, payload_json)
              VALUES (?, ?, 'dispatch_cancelled', 'session', ?, ?)`,

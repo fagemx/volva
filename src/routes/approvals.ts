@@ -80,7 +80,7 @@ export function approvalRoutes(deps: ApprovalDeps): Hono {
       const expiresAt = new Date(now.getTime() + APPROVAL_TTL_MS).toISOString();
 
       // Persist audit row
-      const auditId = `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const auditId = `audit_${crypto.randomUUID()}`;
       deps.db.run(
         `INSERT INTO approval_audits
          (id, pending_id, skill_id, skill_name, execution_mode, permissions_json, external_side_effects, dispatch_context_json, decision)

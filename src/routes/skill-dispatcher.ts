@@ -271,7 +271,7 @@ function enqueueDispatch(
   ctx: SkillDispatchContext,
   reason: string,
 ): SkillDispatchOutcome {
-  const queueId = `dq_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const queueId = `dq_${crypto.randomUUID()}`;
   const request = buildDispatchRequest(merged, ctx, '');
 
   db.prepare(
