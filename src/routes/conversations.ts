@@ -213,10 +213,11 @@ export function conversationRoutes(deps: ConversationDeps): Hono {
         cardVersion: result.cardVersion,
       });
     } catch (err) {
+      console.error('[handleTurn] error:', err);
       return error(
         c,
         'INTERNAL_ERROR',
-        err instanceof Error ? err.message : 'Unknown error',
+        'Internal server error',
         500,
       );
     }

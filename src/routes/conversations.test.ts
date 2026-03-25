@@ -361,6 +361,7 @@ describe('Conversation Routes', () => {
 
     const err = json.error as Record<string, unknown>;
     expect(err.code).toBe('INTERNAL_ERROR');
+    expect(err.message).toBe('Internal server error');
   });
 
   // ─── Without Thyra client ───
