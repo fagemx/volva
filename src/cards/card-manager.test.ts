@@ -345,6 +345,91 @@ describe('CardManager.update transaction atomicity', () => {
   });
 });
 
+// ─── Concurrent Update Tests ───
+
+describe('CardManager concurrent updates', () => {
+  let mgr2: CardManager;
+
+  beforeEach(() => {
+    mgr2 = new CardManager(db);
+  });
+
+  it('second manager throws CardVersionConflictError on stale-read update', () => {
+    // Both managers share the same DB; mgr1 creates card
+    mgr.create('conv1', 'world', minimalWorldCard);
+
+    // Both managers read the same card (stale read scenario)
+    const staleCard1 = mgr.getLatest('conv1')!;
+    const staleCard2 = mgr2.getLatest('conv1')!;
+    expect(staleCard1.id).toBe(staleCard2.id);
+
+    // mgr1 wins the race — updates to version 2
+    const { card: winner } = mgr.update(staleCard1.id, { ...minimalWorldCard, goal: 'mgr1 wins' });
+    expect(winner.version).toBe(2);
+
+    // mgr2 tries to update the same stale card — version 2 already exists
+    expect(() => mgr2.update(staleCard2.id, { ...minimalWorldCard, goal: 'mgr2 loses' }))
+      .toThrow(CardVersionConflictError);
+  });
+
+  it('DB state is consistent after conflict', () => {
+    mgr.create('conv1', 'world', minimalWorldCard);
+
+    const staleCard1 = mgr.getLatest('conv1')!;
+    const staleCard2 = mgr2.getLatest('conv1')!;
+
+    mgr.update(staleCard1.id, { ...minimalWorldCard, goal: 'mgr1 wins' });
+
+    expect(() => mgr2.update(staleCard2.id, { ...minimalWorldCard, goal: 'mgr2 loses' }))
+      .toThrow(CardVersionConflictError);
+
+    // Verify DB consistency
+    const latest = mgr.getLatest('conv1')!;
+    expect(latest.version).toBe(2);
+    expect((latest.content as WorldCard).goal).toBe('mgr1 wins');
+
+    const history = mgr.getVersionHistory('conv1');
+    expect(history).toHaveLength(2);
+    expect(history[0].version).toBe(1);
+    expect(history[1].version).toBe(2);
+
+    const diffs = mgr.getDiffHistory('conv1');
+    expect(diffs).toHaveLength(1);
+    expect(diffs[0].fromVersion).toBe(1);
+    expect(diffs[0].toVersion).toBe(2);
+  });
+
+  it('loser can retry with fresh read and succeed', () => {
+    mgr.create('conv1', 'world', minimalWorldCard);
+
+    // Stale reads
+    const staleCard1 = mgr.getLatest('conv1')!;
+    const staleCard2 = mgr2.getLatest('conv1')!;
+
+    // mgr1 wins
+    mgr.update(staleCard1.id, { ...minimalWorldCard, goal: 'mgr1 wins' });
+
+    // mgr2 fails
+    expect(() => mgr2.update(staleCard2.id, { ...minimalWorldCard, goal: 'mgr2 loses' }))
+      .toThrow(CardVersionConflictError);
+
+    // mgr2 retries with fresh read
+    const freshCard = mgr2.getLatest('conv1')!;
+    expect(freshCard.version).toBe(2);
+
+    const { card: retried } = mgr2.update(freshCard.id, { ...minimalWorldCard, goal: 'mgr2 retries' });
+    expect(retried.version).toBe(3);
+    expect((retried.content as WorldCard).goal).toBe('mgr2 retries');
+
+    // Final state: 3 versions
+    const history = mgr.getVersionHistory('conv1');
+    expect(history).toHaveLength(3);
+    expect(history[0].version).toBe(1);
+    expect(history[1].version).toBe(2);
+    expect(history[2].version).toBe(3);
+  });
+});
+
 // ─── Edge Cases ───
 
 describe('CardManager edge cases', () => {
