@@ -310,6 +310,41 @@ describe('CardManager.getVersion', () => {
   });
 });
 
+// ─── Transaction Atomicity Tests ───
+
+describe('CardManager.update transaction atomicity', () => {
+  it('rolls back card insert when version conflict occurs', () => {
+    const card = mgr.create('conv1', 'world', minimalWorldCard);
+
+    // Manually insert version=2 to cause UNIQUE constraint conflict
+    db.run(
+      "INSERT INTO cards (id, conversation_id, type, version, content) VALUES (?, 'conv1', 'world', 2, '{}')",
+      [crypto.randomUUID()],
+    );
+
+    expect(() => mgr.update(card.id, { ...minimalWorldCard, goal: 'conflict' }))
+      .toThrow(CardVersionConflictError);
+
+    // Verify no orphan card_diffs were created
+    const diffs = db.query('SELECT * FROM card_diffs').all() as Record<string, unknown>[];
+    expect(diffs).toHaveLength(0);
+  });
+
+  it('both card and diff are written atomically on success', () => {
+    const card = mgr.create('conv1', 'world', minimalWorldCard);
+    mgr.update(card.id, { ...minimalWorldCard, goal: 'v2' });
+
+    const cards = db.query("SELECT * FROM cards WHERE conversation_id = 'conv1'")
+      .all() as Record<string, unknown>[];
+    const diffs = db.query('SELECT * FROM card_diffs').all() as Record<string, unknown>[];
+
+    expect(cards).toHaveLength(2);
+    expect(diffs).toHaveLength(1);
+    // card_diffs.card_id should reference the v2 card
+    expect(diffs[0].card_id).toBe(cards[1].id);
+  });
+});
+
 // ─── Edge Cases ───
 
 describe('CardManager edge cases', () => {

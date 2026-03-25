@@ -128,21 +128,25 @@ export async function settleGovernanceBuild(
     };
   }
 
-  // 4. Record forge build
-  const buildId = recordForgeBuild(deps.db, sessionId, buildResult, 'governance');
+  // 4. Record forge build + settlement_initiated event atomically
+  const buildId = deps.db.transaction(() => {
+    const id = recordForgeBuild(deps.db, sessionId, buildResult, 'governance');
 
-  // 5. Record settlement_initiated event
-  deps.sessionManager.addEvent(sessionId, {
-    eventType: 'settlement_initiated',
-    objectType: 'settlement',
-    objectId: buildId,
-    payload: {
-      regime: 'governance',
-      artifactCount: buildResult.artifacts.length,
-      thyraHandoffRequirements,
-      verification,
-    },
-  });
+    // 5. Record settlement_initiated event
+    deps.sessionManager.addEvent(sessionId, {
+      eventType: 'settlement_initiated',
+      objectType: 'settlement',
+      objectId: id,
+      payload: {
+        regime: 'governance',
+        artifactCount: buildResult.artifacts.length,
+        thyraHandoffRequirements,
+        verification,
+      },
+    });
+
+    return id;
+  })();
 
   // 6. Build village pack from worldCard
   const villagePack = deps.buildVillagePack(worldCard);
