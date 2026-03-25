@@ -54,4 +54,37 @@ describe('buildTaskSpec', () => {
     const result = JSON.parse(buildTaskSpec(card)) as Record<string, unknown>;
     expect(result.success_condition).toBeNull();
   });
+
+  it('handles empty string intent', () => {
+    const card: TaskCard = { ...baseCard, intent: '' };
+    const result = JSON.parse(buildTaskSpec(card)) as Record<string, unknown>;
+    expect(result.intent).toBe('');
+  });
+
+  it('preserves special characters in inputs', () => {
+    const card: TaskCard = {
+      ...baseCard,
+      inputs: { 'key:with:colons': 'value\nwith\nnewlines', '"quoted"': 'backslash\\path' },
+    };
+    const result = JSON.parse(buildTaskSpec(card)) as Record<string, unknown>;
+    const inputs = result.inputs as Record<string, string>;
+    expect(inputs['key:with:colons']).toBe('value\nwith\nnewlines');
+    expect(inputs['"quoted"']).toBe('backslash\\path');
+  });
+
+  it('preserves large constraints array', () => {
+    const constraints = Array.from({ length: 25 }, (_, i) => `constraint-${i}`);
+    const card: TaskCard = { ...baseCard, constraints };
+    const result = JSON.parse(buildTaskSpec(card)) as Record<string, unknown>;
+    expect(result.constraints).toEqual(constraints);
+    expect((result.constraints as string[]).length).toBe(25);
+  });
+
+  it('preserves many input entries', () => {
+    const inputs: Record<string, string> = {};
+    for (let i = 0; i < 15; i++) inputs[`key${i}`] = `value${i}`;
+    const card: TaskCard = { ...baseCard, inputs };
+    const result = JSON.parse(buildTaskSpec(card)) as Record<string, unknown>;
+    expect(Object.keys(result.inputs as Record<string, unknown>)).toHaveLength(15);
+  });
 });

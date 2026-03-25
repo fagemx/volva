@@ -65,4 +65,39 @@ describe('buildAdapterConfig', () => {
     expect(parsed).toHaveLength(4);
     expect(parsed.map((p) => p.platform)).toEqual(['x', 'discord', 'telegram', 'owned_page']);
   });
+
+  it('preserves special characters in role', () => {
+    const card: AdapterCard = {
+      platforms: [
+        { platform: 'discord', enabled: true, role: 'support: "tier-1"\nnotes' },
+      ],
+      version: 1,
+    };
+    const parsed = JSON.parse(buildAdapterConfig(card)) as Array<Record<string, unknown>>;
+    expect(parsed[0].role).toBe('support: "tier-1"\nnotes');
+  });
+
+  it('preserves empty string role', () => {
+    const card: AdapterCard = {
+      platforms: [
+        { platform: 'x', enabled: true, role: '' },
+      ],
+      version: 1,
+    };
+    const parsed = JSON.parse(buildAdapterConfig(card)) as Array<Record<string, unknown>>;
+    expect(parsed[0].role).toBe('');
+  });
+
+  it('handles single platform entry', () => {
+    const card: AdapterCard = {
+      platforms: [
+        { platform: 'telegram', enabled: false, role: 'alerts' },
+      ],
+      version: 1,
+    };
+    const result = buildAdapterConfig(card);
+    const parsed = JSON.parse(result) as Array<Record<string, unknown>>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]).toEqual({ platform: 'telegram', enabled: false, role: 'alerts' });
+  });
 });

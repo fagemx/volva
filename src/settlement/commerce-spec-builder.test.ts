@@ -93,4 +93,63 @@ describe('buildCommerceSpec', () => {
     expect(offerings[0].capacity).toBeNull();
     expect(offerings[0].duration).toBeNull();
   });
+
+  it('preserves zero base_price and zero capacity', () => {
+    const card = makeCommerceCard({
+      offerings: [
+        { type: 'stall_slot', name: 'Free Stall', description: 'free', base_price: 0, capacity: 0, duration: null },
+      ],
+    });
+    const parsed = JSON.parse(buildCommerceSpec(card)) as Record<string, unknown>;
+    const offerings = parsed.offerings as Array<Record<string, unknown>>;
+    expect(offerings[0].base_price).toBe(0);
+    expect(offerings[0].capacity).toBe(0);
+  });
+
+  it('preserves zero adjustment_pct', () => {
+    const card = makeCommerceCard({
+      pricing_rules: [
+        { name: 'No Change', condition: 'always', adjustment_pct: 0 },
+      ],
+    });
+    const parsed = JSON.parse(buildCommerceSpec(card)) as Record<string, unknown>;
+    const rules = parsed.pricing_rules as Array<Record<string, unknown>>;
+    expect(rules[0].adjustment_pct).toBe(0);
+  });
+
+  it('handles empty strings in offering fields', () => {
+    const card = makeCommerceCard({
+      offerings: [
+        { type: 'membership', name: '', description: '', base_price: 100, capacity: null, duration: '' },
+      ],
+    });
+    const parsed = JSON.parse(buildCommerceSpec(card)) as Record<string, unknown>;
+    const offerings = parsed.offerings as Array<Record<string, unknown>>;
+    expect(offerings[0].name).toBe('');
+    expect(offerings[0].description).toBe('');
+    expect(offerings[0].duration).toBe('');
+  });
+
+  it('handles empty string in pricing rule condition', () => {
+    const card = makeCommerceCard({
+      pricing_rules: [
+        { name: '', condition: '', adjustment_pct: 10 },
+      ],
+    });
+    const parsed = JSON.parse(buildCommerceSpec(card)) as Record<string, unknown>;
+    const rules = parsed.pricing_rules as Array<Record<string, unknown>>;
+    expect(rules[0].name).toBe('');
+    expect(rules[0].condition).toBe('');
+  });
+
+  it('handles large negative adjustment_pct', () => {
+    const card = makeCommerceCard({
+      pricing_rules: [
+        { name: 'Massive Discount', condition: 'fire sale', adjustment_pct: -99 },
+      ],
+    });
+    const parsed = JSON.parse(buildCommerceSpec(card)) as Record<string, unknown>;
+    const rules = parsed.pricing_rules as Array<Record<string, unknown>>;
+    expect(rules[0].adjustment_pct).toBe(-99);
+  });
 });
