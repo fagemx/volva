@@ -17,6 +17,7 @@ import { isProbeReady, packageProbe } from '../decision/probe-shell';
 import { buildForgeBuildRequest, type ForgeHandoffContext } from '../decision/forge-handoff';
 import {
   ForgeBuildResultSchema,
+  KarviApiError,
   type ForgeBuildDispatchData,
 } from '../karvi-client/schemas';
 import { consumeForgeResult } from '../skills/telemetry-consumer';
@@ -587,15 +588,8 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
     const forgeBuildRequest = buildForgeBuildRequest(commitMemo, forgeContext);
 
     const forgeResult = await deps.karvi.forgeBuild(forgeBuildRequest).catch((err: unknown) => {
-      if (
-        typeof err === 'object'
-        && err !== null
-        && 'code' in err
-        && 'message' in err
-        && typeof (err as { code: unknown }).code === 'string'
-        && typeof (err as { message: unknown }).message === 'string'
-      ) {
-        return { _error: true as const, code: (err as { code: string }).code, message: (err as { message: string }).message, status: 400 as const };
+      if (err instanceof KarviApiError) {
+        return { _error: true as const, code: err.code, message: err.message, status: 400 as const };
       }
       return { _error: true as const, code: 'KARVI_UNAVAILABLE', message: 'Failed to dispatch forge build to Karvi', status: 503 as const };
     });
