@@ -29,7 +29,15 @@ export function dispatchRoutes(deps: DispatchRouteDeps): Hono {
   // Cancel an in-progress dispatch or build on Karvi (0 LLM calls)
   app.post('/api/dispatches/:id/cancel', async (c) => {
     const id = c.req.param('id');
-    const rawBody: unknown = await c.req.json().catch(() => ({}));
+    let rawBody: unknown = {};
+    const contentType = c.req.header('content-type');
+    if (contentType?.includes('application/json')) {
+      try {
+        rawBody = await c.req.json();
+      } catch {
+        return error(c, 'INVALID_JSON', 'Malformed JSON in request body', 400);
+      }
+    }
     const parsed = CancelDispatchInput.safeParse(rawBody);
     const sessionId = parsed.success ? (parsed.data.sessionId ?? null) : null;
     const reason = parsed.success ? parsed.data.reason : 'user_cancel';

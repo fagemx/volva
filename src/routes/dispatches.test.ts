@@ -159,6 +159,39 @@ describe('POST /api/dispatches/:id/cancel', () => {
     expect(payload.cancelled).toBe(true);
   });
 
+  it('returns 400 on malformed JSON body', async () => {
+    const app = makeApp();
+    const req = new Request('http://localhost/api/dispatches/disp-bad/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{invalid json!!!',
+    });
+    const res = await app.fetch(req);
+    expect(res.status).toBe(400);
+
+    const json = await res.json() as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    const err = json.error as Record<string, unknown>;
+    expect(err.code).toBe('INVALID_JSON');
+  });
+
+  it('succeeds with no body and no content-type (uses defaults)', async () => {
+    karvi.cancelDispatch.mockResolvedValueOnce({
+      id: 'disp-nobody',
+      cancelled: true,
+    });
+
+    const app = makeApp();
+    const req = new Request('http://localhost/api/dispatches/disp-nobody/cancel', {
+      method: 'POST',
+    });
+    const res = await app.fetch(req);
+    expect(res.status).toBe(200);
+
+    const json = await res.json() as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+  });
+
   it('succeeds even without sessionId (no event recorded)', async () => {
     karvi.cancelDispatch.mockResolvedValueOnce({
       id: 'disp-004',
