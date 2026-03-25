@@ -658,6 +658,8 @@ export function decisionRoutes(deps: DecisionDeps): Hono {
       if (statusParsed.success) {
         query += ' WHERE status = ?';
         params.push(statusParsed.data);
+      } else {
+        return error(c, 'INVALID_INPUT', `Invalid status filter: ${status}. Must be one of: active, paused, promoted, archived`, 400);
       }
     }
 

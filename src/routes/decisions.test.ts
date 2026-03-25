@@ -914,6 +914,14 @@ describe('Decision Routes E2E', () => {
       const getRes = await jsonGet(app, '/api/decisions/ds_nonexistent');
       expect(getRes.status).toBe(404);
     });
+
+    it('GET /api/decisions returns 400 for invalid status filter', async () => {
+      const res = await jsonGet(app, '/api/decisions?status=invalid');
+      expect(res.status).toBe(400);
+      const body = await res.json() as { ok: boolean; error: { code: string } };
+      expect(body.ok).toBe(false);
+      expect(body.error.code).toBe('INVALID_INPUT');
+    });
   });
 
   // ═══════════════════════════════════════════
