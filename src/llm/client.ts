@@ -56,6 +56,10 @@ export class LLMClient {
     this.model = config?.model ?? process.env.VOLVA_MODEL ?? 'claude-sonnet-4-20250514';
   }
 
+  /**
+   * Generate a text response from the LLM.
+   * @returns Always returns a string (fallback on error). Never throws.
+   */
   async generateText(options: LLMCallOptions): Promise<string> {
     try {
       const response = await this.client.messages.create({
@@ -74,6 +78,10 @@ export class LLMClient {
     }
   }
 
+  /**
+   * Generate a structured (JSON + Zod-validated) response from the LLM.
+   * @returns Always returns `{ok: true, data}` or `{ok: false, error}`. Never throws.
+   */
   async generateStructured<T extends z.ZodType>(
     options: LLMStructuredOptions<T>
   ): Promise<{ ok: true; data: z.infer<T> } | { ok: false; error: string }> {

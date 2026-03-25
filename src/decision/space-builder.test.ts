@@ -25,9 +25,9 @@ function mockLLMClientFailure(error: string): LLMClient {
   } as unknown as LLMClient;
 }
 
-function mockLLMClientThrows(): LLMClient {
+function mockLLMClientFails(): LLMClient {
   return {
-    generateStructured: vi.fn().mockRejectedValueOnce(new Error('API down')),
+    generateStructured: vi.fn().mockResolvedValueOnce({ ok: false, error: 'API down' }),
     generateText: vi.fn(),
   } as unknown as LLMClient;
 }
@@ -230,8 +230,8 @@ describe('buildSpace: error handling', () => {
     expect(result).toEqual([]);
   });
 
-  it('returns empty array on LLM exception (API down)', async () => {
-    const llm = mockLLMClientThrows();
+  it('returns empty array on LLM failure (API down)', async () => {
+    const llm = mockLLMClientFails();
     const intentRoute = makeIntentRoute();
     const pathCheck = makePathCheck();
 
@@ -243,7 +243,7 @@ describe('buildSpace: error handling', () => {
   });
 
   it('never throws on LLM error', async () => {
-    const llm = mockLLMClientThrows();
+    const llm = mockLLMClientFails();
     const intentRoute = makeIntentRoute();
     const pathCheck = makePathCheck();
 

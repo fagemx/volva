@@ -179,32 +179,24 @@ export async function buildSpace(
   pathCheck: PathCheckResult,
   context: SpaceBuilderContext,
 ): Promise<RealizationCandidate[]> {
-  try {
-    const result = await llm.generateStructured({
-      system: SPACE_BUILDER_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: buildUserPrompt(intentRoute, pathCheck, context),
-        },
-      ],
-      schema: z.array(RealizationCandidateSchema),
-      schemaDescription:
-        'Array of RealizationCandidate objects, each with id, regime, form, description, whyThisCandidate (string[]), assumptions (string[]), probeReadinessHints (string[]), timeToSignal, notes (string[]). Optional: domain, vehicle, worldForm.',
-      maxTokens: 4000,
-    });
+  const result = await llm.generateStructured({
+    system: SPACE_BUILDER_SYSTEM_PROMPT,
+    messages: [
+      {
+        role: 'user',
+        content: buildUserPrompt(intentRoute, pathCheck, context),
+      },
+    ],
+    schema: z.array(RealizationCandidateSchema),
+    schemaDescription:
+      'Array of RealizationCandidate objects, each with id, regime, form, description, whyThisCandidate (string[]), assumptions (string[]), probeReadinessHints (string[]), timeToSignal, notes (string[]). Optional: domain, vehicle, worldForm.',
+    maxTokens: 4000,
+  });
 
-    if (!result.ok) {
-      console.warn('[space-builder] LLM validation failed:', result.error);
-      return [];
-    }
-
-    return result.data;
-  } catch (error) {
-    console.error(
-      '[space-builder] LLM call failed:',
-      error instanceof Error ? error.message : 'Unknown error',
-    );
+  if (!result.ok) {
+    console.warn('[space-builder] LLM validation failed:', result.error);
     return [];
   }
+
+  return result.data;
 }

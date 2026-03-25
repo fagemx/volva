@@ -46,20 +46,16 @@ export async function evaluateEconomic(
   llm: LLMClient,
   input: EvaluatorInput,
 ): Promise<EvaluatorOutput> {
-  try {
-    const result = await llm.generateStructured({
-      system: ECONOMIC_EVALUATOR_PROMPT,
-      messages: [{ role: 'user', content: buildEconomicPrompt(input) }],
-      schema: EvaluatorOutputSchema,
-      schemaDescription: 'Economic evaluator verdict with rationale, evidenceUsed, unresolvedRisks, recommendedNextStep',
-    });
+  const result = await llm.generateStructured({
+    system: ECONOMIC_EVALUATOR_PROMPT,
+    messages: [{ role: 'user', content: buildEconomicPrompt(input) }],
+    schema: EvaluatorOutputSchema,
+    schemaDescription: 'Economic evaluator verdict with rationale, evidenceUsed, unresolvedRisks, recommendedNextStep',
+  });
 
-    if (!result.ok) {
-      return defaultHoldOutput('Economic evaluation failed: ' + result.error);
-    }
-
-    return result.data;
-  } catch (error) {
-    return defaultHoldOutput(error instanceof Error ? error.message : 'Unknown error');
+  if (!result.ok) {
+    return defaultHoldOutput('Economic evaluation failed: ' + result.error);
   }
+
+  return result.data;
 }

@@ -97,15 +97,15 @@ describe('evaluateEconomic', () => {
     expect(result.rationale[0]).toContain('Evaluation could not complete');
   });
 
-  it('returns hold when LLM throws an exception', async () => {
+  it('returns hold when LLM returns error result', async () => {
     const llm = {
-      generateStructured: vi.fn().mockRejectedValue(new Error('Network timeout')),
+      generateStructured: vi.fn().mockResolvedValue({ ok: false, error: 'Network timeout' }),
       generateText: vi.fn(),
     } as unknown as LLMClient;
 
     const result = await evaluateEconomic(llm, makeEvaluatorInput());
 
     expect(result.verdict).toBe('hold');
-    expect(result.rationale[0]).toContain('Network timeout');
+    expect(result.rationale[0]).toContain('Economic evaluation failed');
   });
 });

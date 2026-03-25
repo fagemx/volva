@@ -13,13 +13,6 @@ function createMockLlm(
   } as unknown as LLMClient;
 }
 
-function createThrowingLlm(error: Error): LLMClient {
-  return {
-    generateText: vi.fn(),
-    generateStructured: vi.fn().mockRejectedValue(error),
-  } as unknown as LLMClient;
-}
-
 const VALID_CANDIDATE = {
   name: 'deploy-service',
   summary: 'Deploy a service to staging/production with smoke tests',
@@ -102,28 +95,14 @@ describe('capturePattern', () => {
     }
   });
 
-  it('returns error when LLM throws (no crash)', async () => {
-    const llm = createThrowingLlm(new Error('API rate limit exceeded'));
+  it('returns error when LLM returns failure result', async () => {
+    const llm = createMockLlm({ ok: false, error: 'API rate limit exceeded' });
 
     const result = await capturePattern(llm, SAMPLE_HISTORY, 'test');
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toBe('API rate limit exceeded');
-    }
-  });
-
-  it('handles non-Error throws gracefully', async () => {
-    const llm = {
-      generateText: vi.fn(),
-      generateStructured: vi.fn().mockRejectedValue('string error'),
-    } as unknown as LLMClient;
-
-    const result = await capturePattern(llm, SAMPLE_HISTORY, 'test');
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toBe('Unknown error');
     }
   });
 });

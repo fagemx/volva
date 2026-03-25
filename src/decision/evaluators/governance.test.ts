@@ -99,15 +99,15 @@ describe('evaluateGovernance', () => {
     expect(result.rationale[0]).toContain('Evaluation could not complete');
   });
 
-  it('returns hold when LLM throws an exception', async () => {
+  it('returns hold when LLM returns error result', async () => {
     const llm = {
-      generateStructured: vi.fn().mockRejectedValue(new Error('API rate limited')),
+      generateStructured: vi.fn().mockResolvedValue({ ok: false, error: 'API rate limited' }),
       generateText: vi.fn(),
     } as unknown as LLMClient;
 
     const result = await evaluateGovernance(llm, makeEvaluatorInput());
 
     expect(result.verdict).toBe('hold');
-    expect(result.rationale[0]).toContain('API rate limited');
+    expect(result.rationale[0]).toContain('Governance evaluation failed');
   });
 });

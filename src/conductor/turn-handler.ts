@@ -91,14 +91,8 @@ export async function handleTurn(
   const cardContent = currentCard ? currentCard.content : createEmptyCard(mode);
   const cardSnapshot = JSON.stringify(cardContent, null, 2);
 
-  // LLM #1: parse intent (CONTRACT LLM-02: must try/catch)
-  let intent: Intent;
-  try {
-    intent = await parseIntent(llm, userMessage, cardSnapshot);
-  } catch (error) {
-    console.error('[handleTurn] parseIntent threw:', error);
-    intent = { type: 'off_topic', summary: userMessage };
-  }
+  // LLM #1: parse intent (CONTRACT LLM-02 satisfied by LLMClient)
+  const intent = await parseIntent(llm, userMessage, cardSnapshot);
 
   // Auto-detect mode on first turn if LLM returned detected_mode
   let effectiveMode = mode;
@@ -134,14 +128,8 @@ export async function handleTurn(
   const hasPending = cardHasPending(cardType, updatedContent);
   const strategy = pickStrategy(transition.newPhase, intent.type, hasPending, effectiveMode);
 
-  // LLM #2: generate reply (CONTRACT LLM-02: must try/catch)
-  let reply: string;
-  try {
-    reply = await generateReply(llm, strategy, JSON.stringify(updatedContent, null, 2), userMessage, availableSkills);
-  } catch (error) {
-    console.error('[handleTurn] generateReply threw:', error);
-    reply = '(System error during reply generation. Please try again.)';
-  }
+  // LLM #2: generate reply (CONTRACT LLM-02 satisfied by LLMClient)
+  const reply = await generateReply(llm, strategy, JSON.stringify(updatedContent, null, 2), userMessage, availableSkills);
 
   return {
     reply,

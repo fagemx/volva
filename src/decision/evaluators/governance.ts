@@ -46,20 +46,16 @@ export async function evaluateGovernance(
   llm: LLMClient,
   input: EvaluatorInput,
 ): Promise<EvaluatorOutput> {
-  try {
-    const result = await llm.generateStructured({
-      system: GOVERNANCE_EVALUATOR_PROMPT,
-      messages: [{ role: 'user', content: buildGovernancePrompt(input) }],
-      schema: EvaluatorOutputSchema,
-      schemaDescription: 'Governance evaluator verdict with rationale, evidenceUsed, unresolvedRisks, recommendedNextStep',
-    });
+  const result = await llm.generateStructured({
+    system: GOVERNANCE_EVALUATOR_PROMPT,
+    messages: [{ role: 'user', content: buildGovernancePrompt(input) }],
+    schema: EvaluatorOutputSchema,
+    schemaDescription: 'Governance evaluator verdict with rationale, evidenceUsed, unresolvedRisks, recommendedNextStep',
+  });
 
-    if (!result.ok) {
-      return defaultHoldOutput('Governance evaluation failed: ' + result.error);
-    }
-
-    return result.data;
-  } catch (error) {
-    return defaultHoldOutput(error instanceof Error ? error.message : 'Unknown error');
+  if (!result.ok) {
+    return defaultHoldOutput('Governance evaluation failed: ' + result.error);
   }
+
+  return result.data;
 }
