@@ -340,6 +340,33 @@ describe('settleGovernanceBuild', () => {
     expect(events.length).toBe(1);
   });
 
+  it('pre-Thyra writes (forge_build + settlement_initiated) are atomic', async () => {
+    const session = sessionManager.createSession({ title: 'Gov test' });
+    const input = makeInput();
+    input.sessionId = session.id;
+
+    // Create deps with a sessionManager whose addEvent throws after recordForgeBuild succeeds
+    const brokenSessionManager = {
+      addEvent: vi.fn().mockImplementation(() => { throw new Error('Simulated addEvent failure'); }),
+    } as unknown as DecisionSessionManager;
+
+    const deps: GovernanceSettlementDeps = {
+      db,
+      thyra: makeThyraClient(),
+      sessionManager: brokenSessionManager,
+      buildVillagePack,
+    };
+
+    await expect(settleGovernanceBuild(input, deps)).rejects.toThrow('Simulated addEvent failure');
+
+    // Both forge_build and decision_events should be rolled back
+    const forgeBuilds = db.query('SELECT * FROM forge_builds WHERE session_id = ?').all(session.id) as Record<string, unknown>[];
+    expect(forgeBuilds).toHaveLength(0);
+
+    const events = db.query('SELECT * FROM decision_events WHERE session_id = ?').all(session.id) as Record<string, unknown>[];
+    expect(events).toHaveLength(0);
+  });
+
   it('does not record settlement_completed when Thyra fails', async () => {
     const session = sessionManager.createSession({ title: 'Gov test' });
     const input = makeInput();

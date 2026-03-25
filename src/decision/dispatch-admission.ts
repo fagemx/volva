@@ -147,44 +147,46 @@ export function checkDispatchAdmission(
   db: Database,
   ctx: AdmissionContext,
 ): DispatchAdmissionResult {
-  const allWarnings: string[] = [];
+  return db.transaction(() => {
+    const allWarnings: string[] = [];
 
-  // 1. Permission check
-  const permResult = checkPermission(ctx);
-  if (!permResult.admitted) {
-    recordAdmissionEvent(db, ctx, permResult);
-    return permResult;
-  }
-  if (permResult.warnings) allWarnings.push(...permResult.warnings);
+    // 1. Permission check
+    const permResult = checkPermission(ctx);
+    if (!permResult.admitted) {
+      recordAdmissionEvent(db, ctx, permResult);
+      return permResult;
+    }
+    if (permResult.warnings) allWarnings.push(...permResult.warnings);
 
-  // 2. Skill readiness check
-  const readinessResult = checkSkillReadiness(ctx);
-  if (!readinessResult.admitted) {
-    recordAdmissionEvent(db, ctx, readinessResult);
-    return readinessResult;
-  }
+    // 2. Skill readiness check
+    const readinessResult = checkSkillReadiness(ctx);
+    if (!readinessResult.admitted) {
+      recordAdmissionEvent(db, ctx, readinessResult);
+      return readinessResult;
+    }
 
-  // 3. Budget check
-  const budgetResult = checkBudget(db, ctx);
-  if (!budgetResult.admitted) {
-    recordAdmissionEvent(db, ctx, budgetResult);
-    return budgetResult;
-  }
+    // 3. Budget check
+    const budgetResult = checkBudget(db, ctx);
+    if (!budgetResult.admitted) {
+      recordAdmissionEvent(db, ctx, budgetResult);
+      return budgetResult;
+    }
 
-  // 4. Rate limit check
-  const rateResult = checkRateLimit(db, ctx);
-  if (!rateResult.admitted) {
-    recordAdmissionEvent(db, ctx, rateResult);
-    return rateResult;
-  }
+    // 4. Rate limit check
+    const rateResult = checkRateLimit(db, ctx);
+    if (!rateResult.admitted) {
+      recordAdmissionEvent(db, ctx, rateResult);
+      return rateResult;
+    }
 
-  const finalResult: DispatchAdmissionResult = {
-    admitted: true,
-    warnings: allWarnings.length > 0 ? allWarnings : undefined,
-  };
+    const finalResult: DispatchAdmissionResult = {
+      admitted: true,
+      warnings: allWarnings.length > 0 ? allWarnings : undefined,
+    };
 
-  recordAdmissionEvent(db, ctx, finalResult);
-  return finalResult;
+    recordAdmissionEvent(db, ctx, finalResult);
+    return finalResult;
+  })();
 }
 
 // ─── Event Recording ───

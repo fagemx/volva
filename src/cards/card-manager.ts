@@ -152,23 +152,26 @@ export class CardManager {
     );
 
     const newId = crypto.randomUUID();
-    try {
-      this.db.run(
-        'INSERT INTO cards (id, conversation_id, type, version, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [newId, conversationId, type, newVersion, JSON.stringify(mergedContent), originalCreatedAt, now],
-      );
-    } catch (err) {
-      if (err instanceof Error && err.message.includes('UNIQUE constraint failed')) {
-        throw new CardVersionConflictError(conversationId, newVersion);
-      }
-      throw err;
-    }
-
     const diffId = crypto.randomUUID();
-    this.db.run(
-      'INSERT INTO card_diffs (id, card_id, from_version, to_version, diff, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [diffId, newId, oldVersion, newVersion, JSON.stringify(diff), now],
-    );
+
+    this.db.transaction(() => {
+      try {
+        this.db.run(
+          'INSERT INTO cards (id, conversation_id, type, version, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [newId, conversationId, type, newVersion, JSON.stringify(mergedContent), originalCreatedAt, now],
+        );
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('UNIQUE constraint failed')) {
+          throw new CardVersionConflictError(conversationId, newVersion);
+        }
+        throw err;
+      }
+
+      this.db.run(
+        'INSERT INTO card_diffs (id, card_id, from_version, to_version, diff, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [diffId, newId, oldVersion, newVersion, JSON.stringify(diff), now],
+      );
+    })();
 
     const updatedCard: CardEnvelope = {
       id: newId,
