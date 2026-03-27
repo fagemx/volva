@@ -7,7 +7,6 @@ import type { KarviClient } from '../karvi-client/client';
 import {
   DecisionSessionManager,
   type DecisionSession,
-  type CandidateRow,
 } from '../decision/session-manager';
 import { classifyIntent, type ClassifyIntentContext } from '../decision/intent-router';
 import { checkPath, type PathCheckContext } from '../decision/path-check';
@@ -21,6 +20,15 @@ import {
   type ForgeBuildDispatchData,
 } from '../karvi-client/schemas';
 import { consumeForgeResult } from '../skills/telemetry-consumer';
+import {
+  buildIntentRouteFromSession,
+  candidateToRealization,
+  buildCommitMemoFromSignals,
+  storeCommitMemo,
+  advanceToCommitReview,
+  buildFastPathCommitMemo,
+  getLatestCommitMemoDraft,
+} from '../decision/route-helpers';
 import {
   RegimeEnum,
   type IntentRoute,
@@ -99,148 +107,6 @@ const ForgeInput = z.object({
 });
 
 const DecisionStatusFilter = z.enum(['active', 'paused', 'promoted', 'archived']);
-
-// ─── Helpers ───
-
-function buildIntentRouteFromSession(session: DecisionSession): IntentRoute {
-  return {
-    primaryRegime: session.primaryRegime ?? 'economic',
-    secondaryRegimes: session.secondaryRegimes,
-    confidence: session.routingConfidence ?? 0,
-    signals: [],
-    rationale: [],
-    keyUnknowns: session.keyUnknowns,
-    suggestedFollowups: [],
-  };
-}
-
-function candidateToRealization(candidate: CandidateRow): RealizationCandidate {
-  return {
-    id: candidate.id,
-    regime: candidate.regime,
-    form: candidate.form as RealizationCandidate['form'],
-    domain: candidate.domain ?? undefined,
-    vehicle: candidate.vehicle ?? undefined,
-    worldForm: candidate.worldForm as RealizationCandidate['worldForm'],
-    description: candidate.description,
-    whyThisCandidate: candidate.whyExists,
-    assumptions: candidate.assumptions,
-    probeReadinessHints: candidate.assumptions.length > 0
-      ? candidate.assumptions.map((a) => `Validate: ${a}`)
-      : ['Validate core assumptions'],
-    timeToSignal: 'medium',
-    notes: [],
-  };
-}
-
-function buildCommitMemoFromSignals(
-  candidateId: string,
-  candidate: CandidateRow,
-  signals: SignalPacket[],
-  rationale: string[],
-): CommitMemo {
-  const verdict = signals.some((s) => s.strength === 'strong')
-    ? 'commit' as const
-    : 'hold' as const;
-
-  return {
-    candidateId,
-    regime: candidate.regime,
-    verdict,
-    rationale,
-    evidenceUsed: signals.flatMap((s) => s.evidence),
-    unresolvedRisks: candidate.assumptions,
-    whatForgeShouldBuild: [`Build ${candidate.form}: ${candidate.description}`],
-    whatForgeMustNotBuild: [],
-    recommendedNextStep: verdict === 'commit'
-      ? ['Proceed to forge handoff']
-      : ['Gather additional signals before committing'],
-  };
-}
-
-function storeCommitMemo(
-  sessionManager: DecisionSessionManager,
-  sessionId: string,
-  candidateId: string,
-  memo: CommitMemo,
-): void {
-  sessionManager.addCommitMemo(sessionId, candidateId, {
-    regime: memo.regime,
-    verdict: memo.verdict,
-    rationale: memo.rationale,
-    evidenceUsed: memo.evidenceUsed,
-    unresolvedRisks: memo.unresolvedRisks,
-    recommendedNextStep: memo.recommendedNextStep,
-    whatForgeShouldBuild: memo.whatForgeShouldBuild,
-    whatForgeMustNotBuild: memo.whatForgeMustNotBuild,
-  });
-}
-
-function advanceToCommitReview(sessionManager: DecisionSessionManager, sessionId: string): void {
-  sessionManager.advanceStage(sessionId, 'probe-design');
-  sessionManager.advanceStage(sessionId, 'probe-review');
-  sessionManager.advanceStage(sessionId, 'commit-review');
-}
-
-/**
- * Build a synthetic CommitMemo for forge-fast-path.
- * When path certainty is high and all elements are fixed,
- * we skip space-build/evaluate and synthesize directly from fixed elements.
- */
-function buildFastPathCommitMemo(session: DecisionSession): CommitMemo {
-  return {
-    candidateId: `fast-path-${session.id}`,
-    regime: session.primaryRegime ?? 'economic',
-    verdict: 'commit',
-    rationale: ['Fast-path: all elements fixed, high certainty'],
-    evidenceUsed: ['Path check fixed elements'],
-    unresolvedRisks: [],
-    whatForgeShouldBuild: ['Implement based on fixed elements from path check'],
-    whatForgeMustNotBuild: [],
-    recommendedNextStep: ['Proceed to Forge implementation'],
-  };
-}
-
-type CommitMemoDraftRow = {
-  candidate_id: string;
-  regime: Regime;
-  verdict: 'commit' | 'hold' | 'discard';
-  rationale_json: string;
-  evidence_used_json: string;
-  unresolved_risks_json: string;
-  recommended_next_step_json: string;
-  what_forge_should_build_json: string;
-  what_forge_must_not_build_json: string;
-};
-
-function getLatestCommitMemoDraft(db: Database, sessionId: string): CommitMemo | null {
-  const row = db
-    .query(
-      `SELECT candidate_id, regime, verdict, rationale_json, evidence_used_json,
-              unresolved_risks_json, recommended_next_step_json,
-              what_forge_should_build_json, what_forge_must_not_build_json
-       FROM commit_memo_drafts
-       WHERE session_id = ?
-       ORDER BY created_at DESC
-       LIMIT 1`,
-    )
-    .get(sessionId) as CommitMemoDraftRow | null;
-
-  if (!row) return null;
-  if (row.verdict !== 'commit') return null;
-
-  return {
-    candidateId: row.candidate_id,
-    regime: row.regime,
-    verdict: 'commit',
-    rationale: JSON.parse(row.rationale_json) as string[],
-    evidenceUsed: JSON.parse(row.evidence_used_json) as string[],
-    unresolvedRisks: JSON.parse(row.unresolved_risks_json) as string[],
-    recommendedNextStep: JSON.parse(row.recommended_next_step_json) as string[],
-    whatForgeShouldBuild: JSON.parse(row.what_forge_should_build_json) as string[],
-    whatForgeMustNotBuild: JSON.parse(row.what_forge_must_not_build_json) as string[],
-  };
-}
 
 // ─── Route Factory ───
 
