@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import type {
   CapabilityCommitMemo,
   CommitMemo,
@@ -400,7 +401,7 @@ export function buildSyntheticCommitMemo(
   };
 
   const baseMemo: CommitMemo = {
-    candidateId: `synth-${Date.now()}`,
+    candidateId: `synth_${randomUUID()}`,
     regime,
     verdict: 'commit',
     rationale: [fields.intent || `Fast-path: ${fields.domain} ${fields.form}`].filter(Boolean),

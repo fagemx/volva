@@ -81,7 +81,7 @@ describe('spawnFromWorld', () => {
     expect(result).not.toBeNull();
     expect(result!.parentWorld).toBe('world-1');
     expect(result!.childContainer).toBe('shape');
-    expect(result!.childId).toMatch(/^world-1:shape:\d+$/);
+    expect(result!.childId).toMatch(/^world-1:shape:[0-9a-f-]{36}$/);
     expect(result!.reason).toBe('fuzzy sub-problem');
   });
 

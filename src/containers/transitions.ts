@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import type { Container } from './types';
 
 export interface TransitionResult {
@@ -81,7 +82,7 @@ export function spawnFromWorld(
   return {
     parentWorld: worldId,
     childContainer,
-    childId: `${worldId}:${childContainer}:${Date.now()}`,
+    childId: `${worldId}:${childContainer}:${randomUUID()}`,
     reason,
   };
 }

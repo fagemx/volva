@@ -43,7 +43,7 @@ export interface RunRecord {
 }
 
 export function recordRun(db: Database, run: RunRecord): string {
-  const id = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = `run_${crypto.randomUUID()}`;
   db.prepare(`INSERT INTO skill_runs (id, skill_instance_id, conversation_id, outcome, duration_ms, notes)
     VALUES (?, ?, ?, ?, ?, ?)`).run(
     id, run.skillInstanceId, run.conversationId ?? null,
