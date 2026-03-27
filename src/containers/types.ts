@@ -24,4 +24,3 @@ export interface RoutingContext {
   conversationHistory?: string[];
 }
 
-export type { IntentType } from '../schemas/intent';

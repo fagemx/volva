@@ -12,30 +12,6 @@ import type { SkillData } from '../thyra-client/schemas';
 import { createEmptyCard, modeToCardType } from './card-factories';
 import { applyIntent } from './card-mutations';
 
-// Re-export everything from card-factories and card-mutations for backward compatibility
-export {
-  createEmptyWorldCard,
-  createEmptyWorkflowCard,
-  createEmptyTaskCard,
-  createEmptyPipelineCard,
-  createEmptyAdapterCard,
-  createEmptyCommerceCard,
-  createEmptyOrgCard,
-  modeToCardType,
-  createEmptyCard,
-} from './card-factories';
-
-export {
-  applyIntentToCard,
-  applyIntentToWorkflowCard,
-  applyIntentToTaskCard,
-  applyIntentToPipelineCard,
-  applyIntentToAdapterCard,
-  applyIntentToCommerceCard,
-  applyIntentToOrgCard,
-  applyIntent,
-} from './card-mutations';
-
 export interface TurnResult {
   reply: string;
   intent: Intent;

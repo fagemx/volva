@@ -1,8 +1,6 @@
 import type { WorldCard, WorkflowCard, TaskCard, PipelineCard, AdapterCard, CommerceCard, OrgCard, AnyCard, CardType } from '../schemas/card';
 import type { IntentType } from '../schemas/intent';
 
-export type { IntentType } from '../schemas/intent';
-
 export type Phase = 'explore' | 'focus' | 'settle';
 
 export interface TransitionResult {
