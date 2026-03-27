@@ -1,15 +1,16 @@
 import { z } from 'zod';
+import { BaseHttpError, BaseNetworkError, BaseHttpStatusError } from '../shared/http-client';
 
 // ─── Error Classes ───
 
-export class EddaError extends Error {
+export class EddaError extends BaseHttpError {
   constructor(message: string, public readonly cause?: unknown) {
     super(message);
     this.name = 'EddaError';
   }
 }
 
-export class EddaNetworkError extends EddaError {
+export class EddaNetworkError extends BaseNetworkError {
   readonly retryable = true as const;
   constructor(message: string, cause?: unknown) {
     super(message, cause);
@@ -17,7 +18,7 @@ export class EddaNetworkError extends EddaError {
   }
 }
 
-export class EddaHttpError extends EddaError {
+export class EddaHttpError extends BaseHttpStatusError {
   readonly retryable: boolean;
   constructor(
     public readonly status: number,

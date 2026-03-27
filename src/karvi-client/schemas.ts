@@ -1,15 +1,16 @@
 import { z } from 'zod';
+import { BaseHttpError, BaseNetworkError, BaseHttpStatusError } from '../shared/http-client';
 
 // ─── Error Classes ───
 
-export class KarviError extends Error {
+export class KarviError extends BaseHttpError {
   constructor(message: string, public readonly cause?: unknown) {
     super(message);
     this.name = 'KarviError';
   }
 }
 
-export class KarviNetworkError extends KarviError {
+export class KarviNetworkError extends BaseNetworkError {
   readonly retryable = true as const;
   constructor(message: string, cause?: unknown) {
     super(message, cause);
@@ -17,7 +18,7 @@ export class KarviNetworkError extends KarviError {
   }
 }
 
-export class KarviHttpError extends KarviError {
+export class KarviHttpError extends BaseHttpStatusError {
   readonly retryable: boolean;
   constructor(
     public readonly status: number,

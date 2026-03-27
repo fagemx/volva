@@ -1,15 +1,16 @@
 import { z } from 'zod';
+import { BaseHttpError, BaseNetworkError, BaseHttpStatusError } from '../shared/http-client';
 
 // ─── Error Classes ───
 
-export class ThyraError extends Error {
+export class ThyraError extends BaseHttpError {
   constructor(message: string, public readonly cause?: unknown) {
     super(message);
     this.name = 'ThyraError';
   }
 }
 
-export class ThyraNetworkError extends ThyraError {
+export class ThyraNetworkError extends BaseNetworkError {
   readonly retryable = true as const;
   constructor(message: string, cause?: unknown) {
     super(message, cause);
@@ -17,7 +18,7 @@ export class ThyraNetworkError extends ThyraError {
   }
 }
 
-export class ThyraHttpError extends ThyraError {
+export class ThyraHttpError extends BaseHttpStatusError {
   readonly retryable: boolean;
   constructor(
     public readonly status: number,
