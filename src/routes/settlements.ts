@@ -48,6 +48,81 @@ export interface SettlementDeps {
   karvi: KarviClient;
 }
 
+async function confirmVillagePack(deps: SettlementDeps, payload: string): Promise<unknown> {
+  return deps.thyra.applyVillagePack(payload);
+}
+
+async function confirmPipeline(deps: SettlementDeps, payload: string): Promise<unknown> {
+  const spec = yaml.load(payload) as {
+    pipeline: { name: string };
+    steps: Array<{
+      order: number;
+      type: string;
+      label: string;
+      skill_name: string | null;
+      instruction: string | null;
+    }>;
+    proposed_skills?: Array<{
+      name: string;
+      type: string;
+      description: string;
+    }>;
+  };
+
+  // Register proposed skills via Thyra (graceful degradation per skill)
+  const skillResults: Array<{ name: string; ok: boolean; error?: string }> = [];
+  if (spec.proposed_skills && spec.proposed_skills.length > 0) {
+    for (const skill of spec.proposed_skills) {
+      try {
+        await deps.thyra.createSkill({
+          name: skill.name,
+          type: skill.type,
+          description: skill.description,
+        });
+        skillResults.push({ name: skill.name, ok: true });
+      } catch (err) {
+        console.error(`[settlement] createSkill failed for ${skill.name}:`, err);
+        skillResults.push({
+          name: skill.name,
+          ok: false,
+          error: err instanceof Error ? err.message : 'Unknown error',
+        });
+      }
+    }
+  }
+
+  const pipelineResult = await deps.karvi.registerPipeline({
+    name: spec.pipeline.name,
+    steps: spec.steps.map((s) => ({
+      order: s.order,
+      type: s.type,
+      label: s.label,
+      skill_name: s.skill_name,
+      instruction: s.instruction,
+    })),
+  });
+  return { ...pipelineResult as Record<string, unknown>, skill_registrations: skillResults };
+}
+
+function stubResult(target: string, payload: string): unknown {
+  return { applied: true, target, payload_size: payload.length };
+}
+
+const confirmMap: Record<SettlementTarget, (deps: SettlementDeps, payload: string) => Promise<unknown>> = {
+  village_pack: confirmVillagePack,
+  pipeline: confirmPipeline,
+  workflow: (_d, p) => Promise.resolve(stubResult('workflow', p)),
+  task: (_d, p) => Promise.resolve(stubResult('task', p)),
+  adapter_config: (_d, p) => Promise.resolve(stubResult('adapter_config', p)),
+  market_init: (_d, p) => Promise.resolve(stubResult('market_init', p)),
+  org_hierarchy: (_d, p) => Promise.resolve(stubResult('org_hierarchy', p)),
+};
+
+async function confirmSettlement(deps: SettlementDeps, target: string, payload: string): Promise<unknown> {
+  const handler = confirmMap[target as SettlementTarget];
+  return handler(deps, payload);
+}
+
 export function settlementRoutes(deps: SettlementDeps): Hono {
   const app = new Hono();
 
@@ -113,80 +188,7 @@ export function settlementRoutes(deps: SettlementDeps): Hono {
     );
 
     try {
-      let result: unknown;
-
-      switch (target) {
-        case 'village_pack':
-          result = await deps.thyra.applyVillagePack(payload);
-          break;
-        case 'pipeline': {
-          const spec = yaml.load(payload) as {
-            pipeline: { name: string };
-            steps: Array<{
-              order: number;
-              type: string;
-              label: string;
-              skill_name: string | null;
-              instruction: string | null;
-            }>;
-            proposed_skills?: Array<{
-              name: string;
-              type: string;
-              description: string;
-            }>;
-          };
-
-          // Register proposed skills via Thyra (graceful degradation per skill)
-          const skillResults: Array<{ name: string; ok: boolean; error?: string }> = [];
-          if (spec.proposed_skills && spec.proposed_skills.length > 0) {
-            for (const skill of spec.proposed_skills) {
-              try {
-                await deps.thyra.createSkill({
-                  name: skill.name,
-                  type: skill.type,
-                  description: skill.description,
-                });
-                skillResults.push({ name: skill.name, ok: true });
-              } catch (err) {
-                console.error(`[settlement] createSkill failed for ${skill.name}:`, err);
-                skillResults.push({
-                  name: skill.name,
-                  ok: false,
-                  error: err instanceof Error ? err.message : 'Unknown error',
-                });
-              }
-            }
-          }
-
-          const pipelineResult = await deps.karvi.registerPipeline({
-            name: spec.pipeline.name,
-            steps: spec.steps.map((s) => ({
-              order: s.order,
-              type: s.type,
-              label: s.label,
-              skill_name: s.skill_name,
-              instruction: s.instruction,
-            })),
-          });
-          result = { ...pipelineResult as Record<string, unknown>, skill_registrations: skillResults };
-          break;
-        }
-        case 'workflow':
-          result = { applied: true, target: 'workflow', payload_size: payload.length };
-          break;
-        case 'task':
-          result = { applied: true, target: 'task', payload_size: payload.length };
-          break;
-        case 'adapter_config':
-          result = { applied: true, target: 'adapter_config', payload_size: payload.length };
-          break;
-        case 'market_init':
-          result = { applied: true, target: 'market_init', payload_size: payload.length };
-          break;
-        case 'org_hierarchy':
-          result = { applied: true, target: 'org_hierarchy', payload_size: payload.length };
-          break;
-      }
+      const result = await confirmSettlement(deps, target, payload);
 
       // Transition: confirmed -> applied
       deps.db.run(
