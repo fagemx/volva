@@ -37,7 +37,7 @@ describe('URL construction', () => {
       }),
     });
     await client.registerPipeline({ name: 'deploy-pipe', steps: [sampleStep] });
-    expect(capturedUrl).toBe('http://localhost:3464/api/pipelines');
+    expect(capturedUrl).toBe('http://localhost:3461/api/pipelines');
     expect(capturedMethod).toBe('POST');
   });
 
@@ -52,7 +52,7 @@ describe('URL construction', () => {
       }),
     });
     await client.listPipelines();
-    expect(capturedUrl).toBe('http://localhost:3464/api/pipelines');
+    expect(capturedUrl).toBe('http://localhost:3461/api/pipelines');
     expect(capturedMethod).toBe('GET');
   });
 
@@ -67,7 +67,7 @@ describe('URL construction', () => {
       }),
     });
     await client.deletePipeline('my-pipe');
-    expect(capturedUrl).toBe('http://localhost:3464/api/pipelines/my-pipe');
+    expect(capturedUrl).toBe('http://localhost:3461/api/pipelines/my-pipe');
     expect(capturedMethod).toBe('DELETE');
   });
 
@@ -80,7 +80,7 @@ describe('URL construction', () => {
       }),
     });
     await client.getHealth();
-    expect(capturedUrl).toBe('http://localhost:3464/api/health');
+    expect(capturedUrl).toBe('http://localhost:3461/api/health');
   });
 
   it('custom baseUrl is respected', async () => {
@@ -326,7 +326,7 @@ describe('dispatchSkill', () => {
       }),
     });
     const result = await client.dispatchSkill(sampleDispatchRequest);
-    expect(capturedUrl).toBe('http://localhost:3464/api/volva/dispatch-skill');
+    expect(capturedUrl).toBe('http://localhost:3461/api/volva/dispatch-skill');
     expect(capturedMethod).toBe('POST');
     expect(JSON.parse(capturedBody)).toMatchObject({ skillId: 'skill.arch-spec' });
     expect(result.dispatchId).toBe('disp-123');
@@ -357,7 +357,7 @@ describe('forgeBuild', () => {
       }),
     });
     const result = await client.forgeBuild(sampleForgeBuildRequest);
-    expect(capturedUrl).toBe('http://localhost:3464/api/volva/forge-build');
+    expect(capturedUrl).toBe('http://localhost:3461/api/volva/forge-build');
     expect(capturedMethod).toBe('POST');
     expect(result.buildId).toBe('build-456');
     expect(result.status).toBe('queued');
@@ -399,7 +399,7 @@ describe('getDispatchStatus', () => {
       }),
     });
     const result = await client.getDispatchStatus('disp-123');
-    expect(capturedUrl).toBe('http://localhost:3464/api/volva/status/disp-123');
+    expect(capturedUrl).toBe('http://localhost:3461/api/volva/status/disp-123');
     expect(capturedMethod).toBe('GET');
     expect(result.id).toBe('disp-123');
     expect(result.status).toBe('running');
@@ -431,7 +431,7 @@ describe('cancelDispatch', () => {
       }),
     });
     const result = await client.cancelDispatch('disp-123');
-    expect(capturedUrl).toBe('http://localhost:3464/api/volva/cancel/disp-123');
+    expect(capturedUrl).toBe('http://localhost:3461/api/volva/cancel/disp-123');
     expect(capturedMethod).toBe('POST');
     expect(result.id).toBe('disp-123');
     expect(result.cancelled).toBe(true);
