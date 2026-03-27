@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { applyIntentToOrgCard, createEmptyOrgCard } from './turn-handler';
+import { applyIntentToOrgCard } from './card-mutations';
+import { createEmptyOrgCard } from './card-factories';
 import type { OrgCard } from '../schemas/card';
 import type { Intent } from '../schemas/intent';
 

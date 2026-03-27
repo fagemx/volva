@@ -1,14 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  applyIntentToCard,
-  applyIntentToWorkflowCard,
-  applyIntentToTaskCard,
-  createEmptyWorldCard,
-  createEmptyWorkflowCard,
-  createEmptyTaskCard,
-  handleTurn,
-  isDiffEmpty,
-} from './turn-handler';
+import { createEmptyWorldCard, createEmptyWorkflowCard, createEmptyTaskCard } from './card-factories';
+import { applyIntentToCard, applyIntentToWorkflowCard, applyIntentToTaskCard } from './card-mutations';
+import { handleTurn, isDiffEmpty } from './turn-handler';
 import { CardManager } from '../cards/card-manager';
 import { createDb, initSchema } from '../db';
 import type { LLMClient } from '../llm/client';

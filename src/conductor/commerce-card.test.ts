@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { applyIntentToCommerceCard, createEmptyCommerceCard } from './turn-handler';
+import { applyIntentToCommerceCard } from './card-mutations';
+import { createEmptyCommerceCard } from './card-factories';
 import type { CommerceCard } from '../schemas/card';
 import type { Intent } from '../schemas/intent';
 
