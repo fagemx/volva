@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BaseFetchClient, type BaseFetchClientOptions, type BaseNetworkError, type BaseHttpStatusError } from '../shared/http-client';
 import {
   type CreateVillageInput,
   type CreateConstitutionInput,
@@ -10,14 +11,12 @@ import {
   type ChiefData,
   type SkillData,
   type PackApplyData,
-  type HealthResponse,
   VillageDataSchema,
   ConstitutionDataSchema,
   ActiveConstitutionDataSchema,
   ChiefDataSchema,
   SkillDataSchema,
   PackApplyDataSchema,
-  HealthResponseSchema,
   ThyraErrorResponseSchema,
   thyraSuccess,
   ThyraNetworkError,
@@ -26,24 +25,19 @@ import {
   ThyraApiError,
 } from './schemas';
 
-export interface ThyraClientOptions {
-  baseUrl?: string;
-  timeout?: number;
-  retries?: number;
-  fetchFn?: typeof fetch;
-}
+export type ThyraClientOptions = BaseFetchClientOptions;
 
-export class ThyraClient {
-  private readonly baseUrl: string;
-  private readonly timeout: number;
-  private readonly retries: number;
-  private readonly fetchFn: typeof fetch;
-
+export class ThyraClient extends BaseFetchClient {
   constructor(options: ThyraClientOptions = {}) {
-    this.baseUrl = options.baseUrl ?? 'http://localhost:3462';
-    this.timeout = options.timeout ?? 10_000;
-    this.retries = options.retries ?? 2;
-    this.fetchFn = options.fetchFn ?? globalThis.fetch;
+    super('http://localhost:3462', options);
+  }
+
+  protected createNetworkError(message: string, cause?: unknown): BaseNetworkError {
+    return new ThyraNetworkError(message, cause);
+  }
+
+  protected createHttpStatusError(status: number, statusText: string, body: string): BaseHttpStatusError {
+    return new ThyraHttpError(status, statusText, body);
   }
 
   async createVillage(input: CreateVillageInput): Promise<VillageData> {
@@ -82,24 +76,6 @@ export class ThyraClient {
     return this.request('POST', '/api/villages/pack/apply', PackApplyDataSchema, { yaml });
   }
 
-  async getHealth(): Promise<HealthResponse> {
-    const url = `${this.baseUrl}/api/health`;
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => { controller.abort(); }, this.timeout);
-      try {
-        const response = await this.fetchFn(url, { signal: controller.signal });
-        const json: unknown = await response.json();
-        const parsed = HealthResponseSchema.safeParse(json);
-        return parsed.success ? parsed.data : { ok: false };
-      } finally {
-        clearTimeout(timer);
-      }
-    } catch {
-      return { ok: false };
-    }
-  }
-
   private async request<T extends z.ZodTypeAny>(
     method: string,
     path: string,
@@ -124,57 +100,5 @@ export class ThyraClient {
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- Zod validated, generic inference limitation
     return successParsed.data.data as z.infer<T>;
-  }
-
-  private async fetchWithRetry(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<Response> {
-    const url = `${this.baseUrl}${path}`;
-    let lastError: Error | undefined;
-
-    for (let attempt = 0; attempt <= this.retries; attempt++) {
-      if (attempt > 0) {
-        await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, attempt - 1)));
-      }
-
-      const controller = new AbortController();
-      const timer = setTimeout(() => { controller.abort(); }, this.timeout);
-
-      try {
-        const response = await this.fetchFn(url, {
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          body: body ? JSON.stringify(body) : undefined,
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          const responseBody = await response.text();
-          const error = new ThyraHttpError(response.status, response.statusText, responseBody);
-          if (!error.retryable) throw error;
-          lastError = error;
-          continue;
-        }
-
-        return response;
-      } catch (error) {
-        if (error instanceof ThyraHttpError) throw error;
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          lastError = new ThyraNetworkError(`Request timeout after ${this.timeout}ms`, error);
-          continue;
-        }
-        lastError = new ThyraNetworkError(
-          error instanceof Error ? error.message : 'Network error',
-          error,
-        );
-        continue;
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-
-    throw lastError ?? new ThyraNetworkError('Request failed after retries');
   }
 }
