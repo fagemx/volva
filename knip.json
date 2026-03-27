@@ -18,8 +18,6 @@
     "src/thyra-client/schemas.ts",
     "src/karvi-client/client.ts",
     "src/karvi-client/schemas.ts",
-    "src/edda-client/client.ts",
-    "src/edda-client/schemas.ts",
     "src/routes/*.ts",
     "src/decision/*.ts",
     "src/decision/evaluators/*.ts",
